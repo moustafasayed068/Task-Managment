@@ -1,0 +1,7 @@
+fastapi>=0.95.0,<0.100
+uvicorn[standard]>=0.22.0,<0.23
+SQLAlchemy>=1.4,<2.0
+python-jose[cryptography]>=3.0.0
+passlib[bcrypt]>=1.7.0,<1.8
+python-multipart
+email-validator
