@@ -24,7 +24,7 @@ pip install -r requirements.txt
 ## Run the App
 
 ```bash
-uvicorn app.main_app:app --reload
+uvicorn app.main:app --reload
 ```
 
 ## Default Admin Account
