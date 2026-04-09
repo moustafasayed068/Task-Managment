@@ -15,7 +15,7 @@ Supported features:
 ## Installation
 
 ```bash
-cd Image-captioning
+cd your-folder-name
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
