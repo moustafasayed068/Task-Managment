@@ -1,3 +1,103 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from app.db.session_db import get_db
+from app.models.task_models import TaskModel
+from app.models.project_models import ProjectModel
+from app.models.user_models import UserModel
+from app.schemas.task_schemas import TaskCreate, TaskResponse
+from app.core.dependencies import get_current_user
 
 router = APIRouter()
+
+
+# Create Task
+@router.post("/", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
+def create_task(
+    task: TaskCreate,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
+):
+    # Check if project exists
+    project = db.query(ProjectModel).filter(ProjectModel.id == task.project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Check if assignee exists
+    assignee = db.query(UserModel).filter(UserModel.id == task.assignee_id).first()
+    if not assignee:
+        raise HTTPException(status_code=404, detail="Assignee not found")
+    
+    new_task = TaskModel(
+        title=task.title,
+        description=task.description,
+        status=task.status,
+        priority=task.priority,
+        project_id=task.project_id,
+        assignee_id=task.assignee_id
+    )
+    db.add(new_task)
+    db.commit()
+    db.refresh(new_task)
+    return new_task
+
+
+# Get All Tasks
+@router.get("/", response_model=list[TaskResponse])
+def get_tasks(
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
+):
+    return db.query(TaskModel).all()
+
+
+# Get Single Task
+@router.get("/{task_id}", response_model=TaskResponse)
+def get_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
+):
+    task = db.query(TaskModel).filter(TaskModel.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
+
+# Update Task
+@router.put("/{task_id}", response_model=TaskResponse)
+def update_task(
+    task_id: int,
+    task_update: TaskCreate,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
+):
+    task = db.query(TaskModel).filter(TaskModel.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    task.title = task_update.title
+    task.description = task_update.description
+    task.status = task_update.status
+    task.priority = task_update.priority
+    task.project_id = task_update.project_id
+    task.assignee_id = task_update.assignee_id
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+# Delete Task
+@router.delete("/{task_id}", status_code=status.HTTP_200_OK)
+def delete_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
+):
+    task = db.query(TaskModel).filter(TaskModel.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    db.delete(task)
+    db.commit()
+    return {"message": "Task deleted successfully"}
