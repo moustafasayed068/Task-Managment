@@ -63,3 +63,16 @@ A default admin user is created automatically if none exists:
 - Tasks can be filtered by status, priority, assignee ID, or project ID.
 - Employees may only update tasks assigned to them.
 - Status transitions are enforced: `todo` → `in_progress` → `done`.
+
+## view database
+- frist need to install sqlite3
+
+```bash
+sudo apt install sqlite3
+```
+- then in terminal
+
+```bash
+sqlite3 task_managment.db
+```
+
