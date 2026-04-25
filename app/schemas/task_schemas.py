@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import BaseModel
 
 
@@ -26,8 +27,8 @@ class TaskResponse(BaseModel):
     priority: str
     project_id: int
     assignee_id: int
-    created_at: str
-    updated_at: str | None = None
+    created_at: datetime
+    updated_at: datetime | None = None
 
     class Config:
         orm_mode = True

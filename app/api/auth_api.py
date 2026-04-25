@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.db.session_db import get_db
 from app.models.user_models import UserModel
@@ -14,13 +15,12 @@ router = APIRouter()
 # Register
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register(user: UserRegister, db: Session = Depends(get_db)):
-    print(" REGISTER HIT ")
     try:
         new_user = UserModel(
             username=user.username,
             email=user.email,
             password_hash=hash_password(user.password),
-            role=user.role or "user"
+            role="employee"  # Prevent privilege escalation; open registration is only for employees
         )
 
         db.add(new_user)
@@ -29,12 +29,18 @@ def register(user: UserRegister, db: Session = Depends(get_db)):
 
         return {"message": "User registered successfully"}
 
-    except Exception as e:
-        import traceback
-        return {
-            "ERROR_REAL": str(e),
-            "TRACE": traceback.format_exc()
-        }
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username or email already registered"
+        )
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An internal server error occurred"
+        )
 
 
 # Login
