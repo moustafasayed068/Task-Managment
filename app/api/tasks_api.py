@@ -7,8 +7,25 @@ from app.models.project_models import ProjectModel
 from app.models.user_models import UserModel
 from app.schemas.task_schemas import TaskCreate, TaskResponse
 from app.core.dependencies import get_current_user
+from app.core.cache_core import (
+    cache_project_by_id,
+    cache_user_by_id,
+    invalidate_project_cache
+)
 
 router = APIRouter()
+
+
+@cache_project_by_id
+def _get_project_by_id(project_id: int, db: Session):
+    """Get project from database with caching."""
+    return db.query(ProjectModel).filter(ProjectModel.id == project_id).first()
+
+
+@cache_user_by_id
+def _get_user_by_id(user_id: int, db: Session):
+    """Get user from database with caching."""
+    return db.query(UserModel).filter(UserModel.id == user_id).first()
 
 
 # Create Task
@@ -18,13 +35,13 @@ def create_task(
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(get_current_user)
 ):
-    # Check if project exists
-    project = db.query(ProjectModel).filter(ProjectModel.id == task.project_id).first()
+    # Check if project exists (cached)
+    project = _get_project_by_id(task.project_id, db)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Check if assignee exists
-    assignee = db.query(UserModel).filter(UserModel.id == task.assignee_id).first()
+    # Check if assignee exists (cached)
+    assignee = _get_user_by_id(task.assignee_id, db)
     if not assignee:
         raise HTTPException(status_code=404, detail="Assignee not found")
     
@@ -39,6 +56,10 @@ def create_task(
     db.add(new_task)
     db.commit()
     db.refresh(new_task)
+    
+    # Invalidate project cache after task creation
+    invalidate_project_cache()
+    
     return new_task
 
 
@@ -84,6 +105,10 @@ def update_task(
     task.assignee_id = task_update.assignee_id
     db.commit()
     db.refresh(task)
+    
+    # Invalidate project cache after update
+    invalidate_project_cache()
+    
     return task
 
 
@@ -100,4 +125,8 @@ def delete_task(
     
     db.delete(task)
     db.commit()
+    
+    # Invalidate project cache after deletion
+    invalidate_project_cache()
+    
     return {"message": "Task deleted successfully"}

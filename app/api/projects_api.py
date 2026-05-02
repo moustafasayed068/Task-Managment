@@ -6,8 +6,25 @@ from app.models.project_models import ProjectModel
 from app.schemas.project_schemas import ProjectCreate, ProjectResponse
 from app.core.dependencies import get_current_user
 from app.models.user_models import UserModel
+from app.core.cache_core import (
+    cache_project_by_id,
+    cache_all_projects,
+    invalidate_project_cache
+)
 
 router = APIRouter()
+
+
+@cache_project_by_id
+def _get_project_by_id(project_id: int, db: Session):
+    """Get project from database with caching."""
+    return db.query(ProjectModel).filter(ProjectModel.id == project_id).first()
+
+
+@cache_all_projects
+def _get_all_projects(db: Session):
+    """Get all projects from database with caching."""
+    return db.query(ProjectModel).all()
 
 
 # Create Project
@@ -25,6 +42,10 @@ def create_project(
     db.add(new_project)
     db.commit()
     db.refresh(new_project)
+    
+    # Invalidate cache after creating new project
+    invalidate_project_cache()
+    
     return new_project
 
 
@@ -34,7 +55,7 @@ def get_projects(
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(get_current_user)
 ):
-    return db.query(ProjectModel).all()
+    return _get_all_projects(db)
 
 
 # Get Single Project
@@ -44,7 +65,7 @@ def get_project(
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(get_current_user)
 ):
-    project = db.query(ProjectModel).filter(ProjectModel.id == project_id).first()
+    project = _get_project_by_id(project_id, db)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return project
