@@ -4,6 +4,9 @@ SQLAlchemy>=1.4,<2.0
 python-jose[cryptography]>=3.0.0
 passlib[bcrypt]>=1.7.0,<1.8
 python-multipart
+pydantic>=2.0.0,<3.0
 email-validator
-pydantic_settings
-cachetools>=5.3.0
+redis>=4.5.0
+# testing
+pytest>=7.4.0
+httpx>=0.24.0,<0.28

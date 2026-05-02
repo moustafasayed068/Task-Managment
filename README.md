@@ -23,9 +23,81 @@ pip install -r requirements.txt
 
 ## Run the App
 
+### 1. Start Redis Server (Required)
+
+The application uses Redis for caching. You **must** start Redis before running the app.
+
+#### On Linux (Ubuntu/Debian):
 ```bash
+sudo systemctl start redis-server
+redis-cli ping
+# Output: PONG
+```
+
+#### On macOS (with Homebrew):
+```bash
+brew services start redis
+redis-cli ping
+# Output: PONG
+```
+
+#### On Windows:
+Download and install from: https://github.com/microsoftarchive/redis/releases
+
+### 2. Start FastAPI Application
+
+```bash
+source venv/bin/activate
 uvicorn app.main:app --reload
 ```
+
+### 3. Monitor Cache (Optional)
+
+In another terminal, view real-time cache operations:
+```bash
+redis-cli MONITOR
+```
+
+---
+
+## Caching System
+
+This project uses **Redis** for distributed in-memory caching with automatic TTL expiration:
+
+- **User cache**: 5 minutes — caches authenticated users to reduce database queries
+- **Project cache**: 10 minutes — caches project lookups and the projects list
+- **Task cache**: 5 minutes — reserved for future task caching
+
+### Cache Configuration
+
+Edit `.env` to customize Redis settings:
+```bash
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_DB=0
+REDIS_PASSWORD=None
+
+CACHE_USER_TTL=300
+CACHE_PROJECT_TTL=600
+CACHE_TASK_TTL=300
+```
+
+### What Gets Cached
+
+✓ User lookups by ID (authentication)  
+✓ Project by ID (single project fetch)  
+✓ All projects list (GET /api/v1/projects)  
+✓ Project existence checks (during task creation)
+
+Cache is automatically invalidated when:
+- New project is created
+- Project is updated
+- Task is created/updated (affects project)
+
+See [REDIS_SETUP.md](REDIS_SETUP.md) for detailed Redis documentation.  
+See [CACHING_GUIDE.md](CACHING_GUIDE.md) for caching architecture details.
+
+---
 
 ## Default Admin Account
 
