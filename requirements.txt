@@ -5,3 +5,5 @@ python-jose[cryptography]>=3.0.0
 passlib[bcrypt]>=1.7.0,<1.8
 python-multipart
 email-validator
+pydantic_settings
+cachetools>=5.3.0

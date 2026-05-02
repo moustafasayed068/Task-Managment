@@ -6,8 +6,15 @@ from sqlalchemy.orm import Session
 from app.db.session_db import get_db
 from app.models.user_models import UserModel
 from app.core.security import decode_token
+from app.core.cache_core import cache_user_by_id, invalidate_user_cache
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+
+
+@cache_user_by_id
+def _get_user_from_db(user_id: int, db: Session):
+    """Get user from database with caching."""
+    return db.query(UserModel).filter(UserModel.id == user_id).first()
 
 
 def get_current_user(
@@ -24,12 +31,14 @@ def get_current_user(
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    user = db.query(UserModel).filter(UserModel.id == int(user_id)).first()
+    user = _get_user_from_db(int(user_id), db)
 
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
     return user
+
+
 def require_role(required_role: str):
     def role_checker(current_user = Depends(get_current_user)):
         if current_user.role != required_role:
