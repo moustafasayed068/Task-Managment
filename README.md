@@ -135,3 +135,97 @@ A default admin user is created automatically if none exists:
 - Tasks can be filtered by status, priority, assignee ID, or project ID.
 - Employees may only update tasks assigned to them.
 - Status transitions are enforced: `todo` → `in_progress` → `done`.
+
+---
+
+## Authorization & Business Logic Layer (v2)
+
+### New files added
+
+| File | Purpose |
+|------|---------|
+| `app/core/authorization.py` | Role-based dependency helpers (`require_admin`, `require_admin_or_pm`, `require_roles`) |
+| `app/services/project_service.py` | Project CRUD business logic with ownership checks |
+| `app/services/task_service.py` | Task CRUD + status FSM validation + role-aware filtering |
+| `app/api/v2/projects_api_v2.py` | Role-gated project endpoints (`/v2/projects/...`) |
+| `app/api/v2/tasks_api_v2.py` | Role-gated task endpoints with filtering (`/v2/tasks/...`) |
+| `app/api/v2/router_v2.py` | Assembles both v2 sub-routers under `/v2` |
+
+### Wiring the v2 router (one-time step)
+
+Add **two lines** to `app/api/router_api.py`:
+
+```python
+from app.api.v2.router_v2 import v2_router          # ← add
+api_router.include_router(v2_router)                 # ← add
+```
+
+This exposes all v2 endpoints under `/api/v1/v2/...`.  
+If you prefer `/api/v2/...`, include `v2_router` directly in `main.py` with `prefix="/api/v2"`.
+
+### Role matrix
+
+| Action | admin | project_manager | employee |
+|--------|-------|-----------------|----------|
+| Create project | ✓ | ✓ | ✗ |
+| Read projects | ✓ | ✓ | ✓ |
+| Update project | ✓ | ✓ (own only) | ✗ |
+| Delete project | ✓ | ✗ | ✗ |
+| Create task | ✓ | ✓ | ✗ |
+| Read tasks | ✓ (all) | ✓ (all) | ✓ (own only) |
+| Update task — any field | ✓ | ✓ | ✗ |
+| Update task — status only | ✓ | ✓ | ✓ (own task) |
+| Delete task | ✓ | ✗ | ✗ |
+
+### Task status lifecycle (enforced for all roles)
+
+```
+todo  ──►  in_progress  ──►  done
+             ◄──────────────  (rollback: done → in_progress)
+todo  ◄──  in_progress          (rollback: in_progress → todo)
+```
+
+Invalid transitions return **HTTP 422**.  
+New tasks must always start as `todo`.
+
+### Filtering (GET /v2/tasks/)
+
+| Query param | Values | Scope |
+|-------------|--------|-------|
+| `?status=` | `todo` \| `in_progress` \| `done` | all roles |
+| `?priority=` | `low` \| `medium` \| `high` | all roles |
+| `?assignee_id=` | any user ID | admin / project_manager only |
+
+Employees are automatically scoped to their own tasks — `assignee_id` is ignored for them.
+
+### v2 API Endpoints
+
+```
+POST   /api/v1/v2/projects/          Create project  (admin, pm)
+GET    /api/v1/v2/projects/          List projects   (all)
+GET    /api/v1/v2/projects/{id}      Get project     (all)
+PUT    /api/v1/v2/projects/{id}      Update project  (admin, pm-owner)
+DELETE /api/v1/v2/projects/{id}      Delete project  (admin)
+
+POST   /api/v1/v2/tasks/             Create task     (admin, pm)
+GET    /api/v1/v2/tasks/             List tasks      (role-scoped, filterable)
+GET    /api/v1/v2/tasks/{id}         Get task        (role-scoped)
+PATCH  /api/v1/v2/tasks/{id}         Update task     (field-restricted by role)
+DELETE /api/v1/v2/tasks/{id}         Delete task     (admin)
+```
+
+---
+
+## View database
+
+Install SQLite CLI if needed:
+
+```bash
+sudo apt install sqlite3
+```
+
+Open the database:
+
+```bash
+sqlite3 task_managment.db
+```
