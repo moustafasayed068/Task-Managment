@@ -1,231 +1,503 @@
-# Task Management API
+# 📋 Task Management API
 
-## Overview
+A production-ready RESTful API for managing projects and tasks, built with **FastAPI**, **SQLAlchemy**, **Redis**, and **JWT authentication**. Features role-based access control, a task-status state machine, Redis caching, structured logging via Loguru, and real-time email security alerts.
 
-This backend implements a task/project management system using FastAPI, SQLite, JWT authentication, and role-based authorization.
+---
 
-Supported features:
-- User registration and login with JWT tokens
-- Admin, manager, and employee roles
-- CRUD operations for projects and tasks
-- Task status lifecycle validation (todo → in_progress → done)
-- Protected routes and permissions enforcement
-- Request validation using Pydantic schemas
+## 🚀 Features
 
-## Installation
+| Category             | Details                                                                          |
+| -------------------- | -------------------------------------------------------------------------------- |
+| **Authentication**   | JWT-based login & registration with bcrypt password hashing                      |
+| **Authorization**    | Three roles: `admin`, `project_manager`, `employee` — enforced at every endpoint |
+| **Projects & Tasks** | Full CRUD with ownership checks and assignee scoping                             |
+| **Task Workflow**    | Status lifecycle FSM: `todo → in_progress → done` with rollback support          |
+| **Caching**          | Redis-backed Cache-Aside pattern with automatic TTL and invalidation             |
+| **Logging**          | Loguru with professional terminal output + rotating file sinks (multi-stream)    |
+| **Security Alerts**  | SMTP email notifications on failed logins and unauthorized access                |
+| **Testing**          | Pytest suite covering auth, projects, and tasks                                  |
+
+---
+
+## 📁 Project Structure
+
+```
+Task-Managment/
+├── app/
+│   ├── main.py                     # FastAPI app factory & lifespan
+│   ├── api/
+│   │   ├── router_api.py           # Root router (mounts all sub-routers)
+│   │   ├── auth_api.py             # POST /register, /login, /me
+│   │   ├── users_api.py            # User management (admin delete)
+│   │   ├── projects_api.py         # v1 project CRUD
+│   │   ├── tasks_api.py            # v1 task CRUD
+│   │   └── v2/
+│   │       ├── router_v2.py        # v2 sub-router assembly
+│   │       ├── projects_api_v2.py  # Role-gated project endpoints
+│   │       └── tasks_api_v2.py     # Role-gated task endpoints + filtering
+│   ├── core/
+│   │   ├── config_core.py          # Pydantic Settings (.env loader)
+│   │   ├── security.py             # JWT encode/decode, bcrypt helpers
+│   │   ├── dependencies.py         # OAuth2 token extraction, require_role
+│   │   ├── authorization.py        # require_admin, require_admin_or_pm, require_roles
+│   │   ├── logger_core.py          # Loguru configuration (console + file sinks)
+│   │   ├── middleware.py            # ASGI request/response logging middleware
+│   │   └── cache_core.py           # Redis cache decorators & invalidation
+│   ├── db/
+│   │   ├── base_db.py              # SQLAlchemy declarative base
+│   │   └── session_db.py           # Engine & session factory
+│   ├── models/
+│   │   ├── user_models.py          # UserModel (id, username, email, role, password_hash)
+│   │   ├── project_models.py       # ProjectModel (id, name, description, owner_id)
+│   │   └── task_models.py          # TaskModel (id, title, status, priority, assignee_id, project_id)
+│   ├── schemas/
+│   │   ├── auth_schemas.py         # UserRegister, Token, LoginRequest
+│   │   ├── project_schemas.py      # ProjectCreate, ProjectResponse
+│   │   ├── task_schemas.py         # TaskCreate, TaskUpdate, TaskResponse
+│   │   └── user_schemas.py         # UserResponse
+│   └── services/
+│       ├── email_service.py        # SMTP email alerts (login failures, unauthorized access)
+│       ├── project_service.py      # Project business logic + ownership enforcement
+│       └── task_service.py         # Task business logic + status FSM + role-aware filtering
+├── tests/
+│   ├── conftest.py                 # Test fixtures (in-memory SQLite, test client)
+│   ├── test_auth.py                # Auth endpoint tests
+│   ├── test_projects.py            # Project CRUD tests
+│   └── test_tasks.py               # Task CRUD + workflow tests
+├── logs/                           # Auto-created: app.log, errors.log
+├── .env                            # Environment variables (SMTP, Redis, JWT, DB)
+├── requirements.txt                # Python dependencies
+└── README.md
+```
+
+---
+
+## ⚙️ Installation
+
+### Prerequisites
+
+- Python 3.11+
+- Redis server (for caching)
+
+### Setup
 
 ```bash
-cd your-folder-name
-python3 -m venv .venv
+# Clone the repository
+git clone <repository-url>
+cd Task-Managment
+
+# Create virtual environment
+python -m venv .venv
+
+# Activate (Windows)
+.venv\Scripts\activate
+
+# Activate (Linux/macOS)
 source .venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-## Run the App
+### Environment Variables
 
-### 1. Start Redis Server (Required)
+Create a `.env` file in the project root:
 
-The application uses Redis for caching. You **must** start Redis before running the app.
+```env
+# ── App ──────────────────────────────────────────────────────
+APP_NAME="Task Management API"
+API_PREFIX="/api/v1"
 
-#### On Linux (Ubuntu/Debian):
+# ── Security ─────────────────────────────────────────────────
+SECRET_KEY=your-super-secret-key-change-me
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+
+# ── Database ─────────────────────────────────────────────────
+DATABASE_URL=sqlite:///./task_management.db
+
+# ── Redis ────────────────────────────────────────────────────
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_DB=0
+# REDIS_PASSWORD=your_redis_password
+
+# ── Cache TTLs (seconds) ────────────────────────────────────
+CACHE_USER_TTL=300
+CACHE_PROJECT_TTL=600
+CACHE_TASK_TTL=300
+
+# ── SMTP / Email Alerts ─────────────────────────────────────
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USE_TLS=true
+SMTP_USERNAME=your-email@gmail.com
+SMTP_PASSWORD=your-gmail-app-password
+ALERT_EMAIL_FROM=your-email@gmail.com
+ALERT_EMAIL_TO=recipient@example.com
+```
+
+> **Gmail users**: Use an [App Password](https://support.google.com/accounts/answer/185833), not your real password. Enable 2-Step Verification first, then generate an App Password under _Google Account → Security → App Passwords_.
+
+---
+
+## 🏃 Running the App
+
+### 1. Start Redis (required for caching)
+
+**Windows** — Download from [Microsoft Archive](https://github.com/microsoftarchive/redis/releases), or use Docker:
+
+```bash
+docker run -d -p 6379:6379 redis:latest
+```
+
+**Linux (Ubuntu/Debian)**:
+
 ```bash
 sudo systemctl start redis-server
-redis-cli ping
-# Output: PONG
+redis-cli ping   # → PONG
 ```
 
-#### On macOS (with Homebrew):
+**macOS (Homebrew)**:
+
 ```bash
 brew services start redis
-redis-cli ping
-# Output: PONG
+redis-cli ping   # → PONG
 ```
 
-#### On Windows:
-Download and install from: https://github.com/microsoftarchive/redis/releases
-
-### 2. Start FastAPI Application
+### 2. Start the API server
 
 ```bash
-source venv/bin/activate
 uvicorn app.main:app --reload
 ```
 
-### 3. Monitor Cache (Optional)
+The server starts at **http://127.0.0.1:8000**.
 
-In another terminal, view real-time cache operations:
+### 3. Open the interactive docs
+
+- **Swagger UI**: http://127.0.0.1:8000/docs
+- **ReDoc**: http://127.0.0.1:8000/redoc
+
+---
+
+## 🔐 Authentication & Roles
+
+### Default Admin Account
+
+A default admin user is created automatically during the first startup:
+
+| Field    | Value      |
+| -------- | ---------- |
+| Username | `admin`    |
+| Password | `admin123` |
+
+### Roles
+
+| Role              | Description                                                       |
+| ----------------- | ----------------------------------------------------------------- |
+| `admin`           | Full access — can CRUD everything                                 |
+| `project_manager` | Create/update own projects, create/update tasks in owned projects |
+| `employee`        | View own tasks, update task status only (on assigned tasks)       |
+
+### Login Flow
+
+1. `POST /api/v1/auth/register` — create an employee account
+2. `POST /api/v1/auth/login` — send `username` & `password` as form data → receive a JWT `access_token`
+3. Include the token in subsequent requests: `Authorization: Bearer <token>`
+
+---
+
+## 📡 API Endpoints
+
+### Health & Diagnostics
+
+| Method | Endpoint      | Description                                    |
+| ------ | ------------- | ---------------------------------------------- |
+| `GET`  | `/`           | Health check                                   |
+| `GET`  | `/test-email` | Send a test email to verify SMTP configuration |
+
+### Authentication (`/api/v1/auth`)
+
+| Method | Endpoint    | Description                                     | Auth   |
+| ------ | ----------- | ----------------------------------------------- | ------ |
+| `POST` | `/register` | Register a new employee                         | —      |
+| `POST` | `/login`    | Obtain JWT token (form: `username`, `password`) | —      |
+| `GET`  | `/me`       | Current user info                               | 🔒 Any |
+
+### Users (`/api/v1/users`)
+
+| Method   | Endpoint     | Description       | Auth     |
+| -------- | ------------ | ----------------- | -------- |
+| `GET`    | `/me`        | Current user info | 🔒 Any   |
+| `DELETE` | `/{user_id}` | Delete a user     | 🔒 Admin |
+
+### Projects v1 (`/api/v1/projects`)
+
+| Method   | Endpoint | Description       | Auth   |
+| -------- | -------- | ----------------- | ------ |
+| `POST`   | `/`      | Create project    | 🔒 Any |
+| `GET`    | `/`      | List all projects | 🔒 Any |
+| `GET`    | `/{id}`  | Get project by ID | 🔒 Any |
+| `PUT`    | `/{id}`  | Update project    | 🔒 Any |
+| `DELETE` | `/{id}`  | Delete project    | 🔒 Any |
+
+### Tasks v1 (`/api/v1/tasks`)
+
+| Method   | Endpoint | Description    | Auth   |
+| -------- | -------- | -------------- | ------ |
+| `POST`   | `/`      | Create task    | 🔒 Any |
+| `GET`    | `/`      | List all tasks | 🔒 Any |
+| `GET`    | `/{id}`  | Get task by ID | 🔒 Any |
+| `PUT`    | `/{id}`  | Update task    | 🔒 Any |
+| `DELETE` | `/{id}`  | Delete task    | 🔒 Any |
+
+### Projects v2 — Role-Gated (`/api/v1/v2/projects`)
+
+| Method   | Endpoint | Description       | Auth                 |
+| -------- | -------- | ----------------- | -------------------- |
+| `POST`   | `/`      | Create project    | 🔒 Admin, PM         |
+| `GET`    | `/`      | List all projects | 🔒 Any               |
+| `GET`    | `/{id}`  | Get project by ID | 🔒 Any               |
+| `PUT`    | `/{id}`  | Update project    | 🔒 Admin, PM (owner) |
+| `DELETE` | `/{id}`  | Delete project    | 🔒 Admin             |
+
+### Tasks v2 — Role-Gated (`/api/v1/v2/tasks`)
+
+| Method   | Endpoint | Description                            | Auth         |
+| -------- | -------- | -------------------------------------- | ------------ |
+| `POST`   | `/`      | Create task                            | 🔒 Admin, PM |
+| `GET`    | `/`      | List tasks (filterable, role-scoped)   | 🔒 Any       |
+| `GET`    | `/{id}`  | Get task by ID (role-scoped)           | 🔒 Any       |
+| `PATCH`  | `/{id}`  | Update task (field-restricted by role) | 🔒 Any       |
+| `DELETE` | `/{id}`  | Delete task                            | 🔒 Admin     |
+
+**Task Filters** (GET `/api/v1/v2/tasks/`):
+
+| Query Param     | Values                        | Scope                                   |
+| --------------- | ----------------------------- | --------------------------------------- |
+| `?status=`      | `todo`, `in_progress`, `done` | All roles                               |
+| `?priority=`    | `low`, `medium`, `high`       | All roles                               |
+| `?assignee_id=` | User ID                       | Admin / PM only (ignored for employees) |
+
+---
+
+## 🔄 Task Status Lifecycle
+
+All status transitions are validated — invalid transitions return **HTTP 422**.
+
+```
+todo  ──►  in_progress  ──►  done
+              ◄──                ◄──
+```
+
+| From          | Allowed Transitions           |
+| ------------- | ----------------------------- |
+| `todo`        | → `in_progress`               |
+| `in_progress` | → `done`, → `todo` (rollback) |
+| `done`        | → `in_progress` (reopen)      |
+
+New tasks **must** start with status `todo`.
+
+---
+
+## 🛡️ Role Permission Matrix (v2 Endpoints)
+
+| Action                    |  Admin   |  Project Manager  |    Employee    |
+| ------------------------- | :------: | :---------------: | :------------: |
+| Create project            |    ✅    |        ✅         |       ❌       |
+| Read projects             |    ✅    |        ✅         |       ✅       |
+| Update project            |    ✅    |   ✅ (own only)   |       ❌       |
+| Delete project            |    ✅    |        ❌         |       ❌       |
+| Create task               |    ✅    |        ✅         |       ❌       |
+| Read tasks                | ✅ (all) | ✅ (own projects) | ✅ (own tasks) |
+| Update task — any field   |    ✅    |        ✅         |       ❌       |
+| Update task — status only |    ✅    |        ✅         | ✅ (own task)  |
+| Delete task               |    ✅    |        ❌         |       ❌       |
+
+---
+
+## 📝 Logging System
+
+The project uses **Loguru** for structured, colourful logging with a custom ASGI middleware.
+
+### Terminal Output
+
+Clean, professional logs with a custom format. Every line includes a `req={uuid}` field to correlate all logs for a single request.
+
+```
+2026-05-03 06:08:27.903 | INFO     | app.main:lifespan:18 | req=- | Task Management API starting up — all systems go
+2026-05-03 06:08:27.904 | INFO     | uvicorn.error:startup:62 | req=- | Application startup complete.
+2026-05-03 05:52:21.202 | INFO     | app.core.middleware:__call__:32 | req=a1b2c3d4 | [REQUEST]  POST /api/v1/auth/login
+2026-05-03 05:52:21.236 | WARNING  | app.api.auth_api:login:54 | req=a1b2c3d4 | AUTH FAILED | username=fakeuser | ip=127.0.0.1 | reason=user_not_found
+2026-05-03 05:52:23.738 | SUCCESS  | app.services.email_service:_send:104 | req=a1b2c3d4 | EMAIL SENT | to=admin@example.com
+2026-05-03 05:52:23.744 | WARNING  | app.core.middleware:__call__:65 | req=a1b2c3d4 | [RESPONSE] POST /api/v1/auth/login | status=401 | 2541.47ms
+```
+
+| Level    | Colour     | Use Case                                            |
+| -------- | ---------- | --------------------------------------------------- |
+| TRACE    | —          | Very verbose debugging                              |
+| DEBUG    | Blue       | Internal state inspection                           |
+| INFO     | Green      | Normal operations (requests, responses, email sent) |
+| SUCCESS  | Bold green | Confirmed completions (email delivered)             |
+| WARNING  | Yellow     | Auth failures, 4xx responses, unauthorized access   |
+| ERROR    | Red        | 5xx responses, SMTP failures                        |
+| CRITICAL | Bold red   | Failed admin login attempts, unhandled exceptions   |
+
+### File Sinks
+
+| File              | Level    | Rotation | Retention |
+| ----------------- | -------- | -------- | --------- |
+| `logs/app.log`    | INFO+    | 10 MB    | 30 days   |
+| `logs/errors.log` | WARNING+ | 5 MB     | 60 days   |
+
+Both file sinks use ZIP compression and async writing (`enqueue=True`).
+Note: `KeyboardInterrupt` (CTRL+C) exceptions are filtered out of file sinks to prevent clutter, but remain visible in the terminal.
+
+### Middleware
+
+Every HTTP request/response is logged automatically by `LoggingMiddleware` with:
+
+- HTTP method & path
+- Client IP address
+- Response status code
+- Response time (milliseconds)
+- An `X-Response-Time` header injected into every response
+
+---
+
+## 📧 Email Security Alerts
+
+The system sends **real-time email notifications** for security-sensitive events via SMTP.
+
+### Triggers
+
+| Event                             | Email Subject                                  | When                                            |
+| --------------------------------- | ---------------------------------------------- | ----------------------------------------------- |
+| **Failed login — user not found** | 🔒 Security Alert: Failed Login Attempt        | Any login attempt with a non-existent username  |
+| **Failed login — wrong password** | 🔒 Security Alert: Failed Login Attempt        | Wrong password for any role (admin/PM/employee) |
+| **Unauthorized access**           | 🔒 Security Alert: Unauthorized Access Attempt | Accessing an endpoint without the required role |
+
+### How It Works
+
+- Emails are dispatched asynchronously via FastAPI's `BackgroundTasks` to avoid blocking the HTTP response (minimizing latency).
+- Security alert logs (like `[CRITICAL]` for failed admin logins) are fired synchronously _before_ the response returns.
+- Uses `smtplib` with STARTTLS and a proper SSL context.
+- All send attempts (success or failure) are logged in the terminal as background events with the matching `request_id`.
+
+**Implementation Details:**
+
+- **Preventing Task Drops:** When a login fails, the API returns a custom `JSONResponse(status_code=401, background=background_tasks)` instead of raising an `HTTPException`. This prevents FastAPI's default exception handler from discarding the queued background tasks.
+- **Bulletproof Execution:** The background email functions are wrapped in a robust `try/except` block with `logger.exception()` to ensure any unexpected errors during background execution are explicitly logged and never fail silently.
+
+### Verify SMTP Configuration
+
+Hit the diagnostic endpoint to verify your email setup works:
+
+```
+GET /test-email
+```
+
+**Success**: `{"status": "ok", "message": "Test email sent successfully. Check your inbox."}`
+**Failure**: `{"status": "error", "message": "Email failed — check the terminal logs for details."}`
+
+---
+
+## 🗄️ Caching System
+
+Uses **Redis** with a Cache-Aside pattern and automatic TTL expiration.
+
+### Cache Configuration
+
+| Setting             | Default       | Description                |
+| ------------------- | ------------- | -------------------------- |
+| `CACHE_USER_TTL`    | 300s (5 min)  | Authenticated user lookups |
+| `CACHE_PROJECT_TTL` | 600s (10 min) | Project lookups & list     |
+| `CACHE_TASK_TTL`    | 300s (5 min)  | Reserved for future use    |
+
+### What Gets Cached
+
+- ✅ User lookups by ID (during token validation)
+- ✅ Project by ID (single fetch)
+- ✅ All projects list (`GET /api/v1/projects`)
+- ✅ Project existence checks (during task creation)
+
+### Automatic Invalidation
+
+Cache is cleared when:
+
+- A new project is created
+- A project is updated or deleted
+- A task is created, updated, or deleted (project cache affected)
+
+### Monitor Cache Operations
+
 ```bash
 redis-cli MONITOR
 ```
 
 ---
 
-## Caching System
+## 🧪 Testing
 
-This project uses **Redis** for distributed in-memory caching with automatic TTL expiration:
-
-- **User cache**: 5 minutes — caches authenticated users to reduce database queries
-- **Project cache**: 10 minutes — caches project lookups and the projects list
-- **Task cache**: 5 minutes — reserved for future task caching
-
-### Cache Configuration
-
-Edit `.env` to customize Redis settings:
 ```bash
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_DB=0
-REDIS_PASSWORD=None
+# Run all tests
+pytest
 
-CACHE_USER_TTL=300
-CACHE_PROJECT_TTL=600
-CACHE_TASK_TTL=300
+# Run with verbose output
+pytest -v
+
+# Run a specific test file
+pytest tests/test_auth.py -v
 ```
 
-### What Gets Cached
-
-✓ User lookups by ID (authentication)  
-✓ Project by ID (single project fetch)  
-✓ All projects list (GET /api/v1/projects)  
-✓ Project existence checks (during task creation)
-
-Cache is automatically invalidated when:
-- New project is created
-- Project is updated
-- Task is created/updated (affects project)
-
-See [REDIS_SETUP.md](REDIS_SETUP.md) for detailed Redis documentation.  
-See [CACHING_GUIDE.md](CACHING_GUIDE.md) for caching architecture details.
+Tests use an **in-memory SQLite** database and a separate FastAPI `TestClient` — no external services required.
 
 ---
 
-## Default Admin Account
+## 🗃️ Database
 
-A default admin user is created automatically if none exists:
-- username: `admin`
-- password: `admin123`
+The project uses **SQLite** by default (file: `task_management.db`).
 
-## API Endpoints
+### Inspect the Database
 
-### Authentication
-- `POST /api/v1/auth/register` — register a new employee user
-- `POST /api/v1/auth/login` — obtain JWT access token
+```bash
+# Windows (if sqlite3 is in PATH)
+sqlite3 task_management.db
 
-### Users
-- `GET /api/v1/users/me` — current authenticated user
-- `GET /api/v1/users` — list users (admin only)
-- `GET /api/v1/users/{user_id}` — read user by ID
-
-### Projects
-- `POST /api/v1/projects` — create a project (admin or manager)
-- `GET /api/v1/projects` — list projects
-- `GET /api/v1/projects/{project_id}` — read a project
-- `PUT /api/v1/projects/{project_id}` — update a project (admin or manager)
-- `DELETE /api/v1/projects/{project_id}` — delete a project (admin only)
-
-### Tasks
-- `POST /api/v1/tasks` — create a task (admin or manager)
-- `GET /api/v1/tasks` — list tasks with optional filters
-- `GET /api/v1/tasks/{task_id}` — read a task
-- `PUT /api/v1/tasks/{task_id}` — update a task (assignee or manager/admin)
-- `DELETE /api/v1/tasks/{task_id}` — delete a task (admin only)
-
-## Notes
-
-- Tasks can be filtered by status, priority, assignee ID, or project ID.
-- Employees may only update tasks assigned to them.
-- Status transitions are enforced: `todo` → `in_progress` → `done`.
-
----
-
-## Authorization & Business Logic Layer (v2)
-
-### New files added
-
-| File | Purpose |
-|------|---------|
-| `app/core/authorization.py` | Role-based dependency helpers (`require_admin`, `require_admin_or_pm`, `require_roles`) |
-| `app/services/project_service.py` | Project CRUD business logic with ownership checks |
-| `app/services/task_service.py` | Task CRUD + status FSM validation + role-aware filtering |
-| `app/api/v2/projects_api_v2.py` | Role-gated project endpoints (`/v2/projects/...`) |
-| `app/api/v2/tasks_api_v2.py` | Role-gated task endpoints with filtering (`/v2/tasks/...`) |
-| `app/api/v2/router_v2.py` | Assembles both v2 sub-routers under `/v2` |
-
-### Wiring the v2 router (one-time step)
-
-Add **two lines** to `app/api/router_api.py`:
-
-```python
-from app.api.v2.router_v2 import v2_router          # ← add
-api_router.include_router(v2_router)                 # ← add
+# Linux/macOS
+sqlite3 task_management.db
 ```
 
-This exposes all v2 endpoints under `/api/v1/v2/...`.  
-If you prefer `/api/v2/...`, include `v2_router` directly in `main.py` with `prefix="/api/v2"`.
+Common queries:
 
-### Role matrix
-
-| Action | admin | project_manager | employee |
-|--------|-------|-----------------|----------|
-| Create project | ✓ | ✓ | ✗ |
-| Read projects | ✓ | ✓ | ✓ |
-| Update project | ✓ | ✓ (own only) | ✗ |
-| Delete project | ✓ | ✗ | ✗ |
-| Create task | ✓ | ✓ | ✗ |
-| Read tasks | ✓ (all) | ✓ (all) | ✓ (own only) |
-| Update task — any field | ✓ | ✓ | ✗ |
-| Update task — status only | ✓ | ✓ | ✓ (own task) |
-| Delete task | ✓ | ✗ | ✗ |
-
-### Task status lifecycle (enforced for all roles)
-
-```
-todo  ──►  in_progress  ──►  done
-             ◄──────────────  (rollback: done → in_progress)
-todo  ◄──  in_progress          (rollback: in_progress → todo)
-```
-
-Invalid transitions return **HTTP 422**.  
-New tasks must always start as `todo`.
-
-### Filtering (GET /v2/tasks/)
-
-| Query param | Values | Scope |
-|-------------|--------|-------|
-| `?status=` | `todo` \| `in_progress` \| `done` | all roles |
-| `?priority=` | `low` \| `medium` \| `high` | all roles |
-| `?assignee_id=` | any user ID | admin / project_manager only |
-
-Employees are automatically scoped to their own tasks — `assignee_id` is ignored for them.
-
-### v2 API Endpoints
-
-```
-POST   /api/v1/v2/projects/          Create project  (admin, pm)
-GET    /api/v1/v2/projects/          List projects   (all)
-GET    /api/v1/v2/projects/{id}      Get project     (all)
-PUT    /api/v1/v2/projects/{id}      Update project  (admin, pm-owner)
-DELETE /api/v1/v2/projects/{id}      Delete project  (admin)
-
-POST   /api/v1/v2/tasks/             Create task     (admin, pm)
-GET    /api/v1/v2/tasks/             List tasks      (role-scoped, filterable)
-GET    /api/v1/v2/tasks/{id}         Get task        (role-scoped)
-PATCH  /api/v1/v2/tasks/{id}         Update task     (field-restricted by role)
-DELETE /api/v1/v2/tasks/{id}         Delete task     (admin)
+```sql
+.tables                           -- list all tables
+SELECT * FROM users;              -- view all users
+SELECT * FROM projects;           -- view all projects
+SELECT * FROM tasks;              -- view all tasks
+.quit                             -- exit
 ```
 
 ---
 
-## View database
+## 📦 Dependencies
 
-Install SQLite CLI if needed:
+| Package                          | Purpose                                    |
+| -------------------------------- | ------------------------------------------ |
+| `fastapi`                        | Web framework                              |
+| `uvicorn`                        | ASGI server                                |
+| `sqlalchemy`                     | ORM & database                             |
+| `python-jose`                    | JWT token encoding/decoding                |
+| `bcrypt`                         | Password hashing                           |
+| `python-multipart`               | Form data parsing (login)                  |
+| `pydantic` / `pydantic-settings` | Request/response validation & .env loading |
+| `email-validator`                | Email field validation                     |
+| `redis`                          | Cache client                               |
+| `loguru`                         | Structured logging                         |
+| `pytest` / `httpx`               | Testing                                    |
 
-```bash
-sudo apt install sqlite3
-```
+---
 
-Open the database:
+## 📄 License
 
-```bash
-sqlite3 task_managment.db
-```
+This project is developed for academic purposes as part of a university course.

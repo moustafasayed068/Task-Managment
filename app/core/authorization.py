@@ -1,48 +1,46 @@
 """
-authorization.py
-================
 Role-based access control helpers.
 
-Roles defined in the project:
-  - "admin"           → full access (manage projects, tasks, users)
+Roles:
+  - "admin"           → full access
   - "project_manager" → assign / monitor tasks; create & update projects
-  - "employee"        → update only their OWN assigned tasks (status only)
-
-Usage in routes:
-    current_user: UserModel = Depends(require_admin())
-    current_user: UserModel = Depends(require_admin_or_pm())
-    current_user: UserModel = Depends(require_roles(["admin", "project_manager"]))
+  - "employee"        → update only their own assigned tasks
 """
 
 from typing import List
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 
 from app.core.dependencies import get_current_user
+from app.core.logger_core import logger
 from app.models.user_models import UserModel
 
 
-# ---------------------------------------------------------------------------
-# Generic helper — accepts any of the listed roles
-# ---------------------------------------------------------------------------
-
 def require_roles(allowed_roles: List[str]):
-    """
-    Returns a FastAPI dependency that passes only when the authenticated
-    user's role is one of *allowed_roles*.
-
-    Example::
-
-        @router.delete("/{id}")
-        def delete_something(
-            id: int,
-            current_user: UserModel = Depends(require_roles(["admin"]))
-        ):
-            ...
-    """
-
-    def _checker(current_user: UserModel = Depends(get_current_user)) -> UserModel:
+    def _checker(
+        request: Request,
+        current_user: UserModel = Depends(get_current_user),
+    ) -> UserModel:
         if current_user.role not in allowed_roles:
+            client_ip = request.client.host if request.client else "unknown"
+            endpoint  = request.url.path
+
+            logger.warning(
+                "UNAUTHORIZED ACCESS | username={} | role={} | ip={} "
+                "| endpoint={} | required={}",
+                current_user.username, current_user.role,
+                client_ip, endpoint, allowed_roles,
+            )
+
+            # Synchronous email — guaranteed to send before the 403 response
+            from app.services.email_service import send_unauthorized_access_alert
+            send_unauthorized_access_alert(
+                username=current_user.username,
+                ip_address=client_ip,
+                role=current_user.role,
+                endpoint=endpoint,
+            )
+
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=(
@@ -55,20 +53,13 @@ def require_roles(allowed_roles: List[str]):
     return _checker
 
 
-# ---------------------------------------------------------------------------
-# Convenience shortcuts
-# ---------------------------------------------------------------------------
-
 def require_admin():
-    """Only 'admin' role is allowed."""
     return require_roles(["admin"])
 
 
 def require_admin_or_pm():
-    """'admin' or 'project_manager' roles are allowed."""
     return require_roles(["admin", "project_manager"])
 
 
 def require_any_authenticated():
-    """Any logged-in user (all roles). Just validates the JWT."""
     return get_current_user
