@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
 
@@ -7,6 +7,7 @@ from app.db.session_db import get_db
 from app.models.user_models import UserModel
 from app.core.security import decode_token
 from app.core.cache_core import cache_user_by_id, invalidate_user_cache
+from app.core.logger_core import logger
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
@@ -44,8 +45,30 @@ def get_current_user(
 
 
 def require_role(required_role: str):
-    def role_checker(current_user: UserModel = Depends(get_current_user)):
+    def role_checker(
+        request: Request,
+        current_user: UserModel = Depends(get_current_user),
+    ):
         if current_user.role != required_role:
+            client_ip = request.client.host if request.client else "unknown"
+            endpoint  = request.url.path
+
+            logger.warning(
+                "UNAUTHORIZED ACCESS | username={} | role={} | ip={} "
+                "| endpoint={} | required_role={}",
+                current_user.username, current_user.role,
+                client_ip, endpoint, required_role,
+            )
+
+            # Synchronous email alert for unauthorized access
+            from app.services.email_service import send_unauthorized_access_alert
+            send_unauthorized_access_alert(
+                username=current_user.username,
+                ip_address=client_ip,
+                role=current_user.role,
+                endpoint=endpoint,
+            )
+
             raise HTTPException(
                 status_code=403,
                 detail="Not enough permissions"
