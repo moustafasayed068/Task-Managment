@@ -9,6 +9,10 @@ from app.core.config_core import settings
 from app.db.base_db import Base
 from app.db.session_db import engine
 
+    # Temporary monitoring routes
+from fastapi import APIRouter
+from datetime import datetime
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -42,7 +46,6 @@ async def lifespan(app: FastAPI):
     # ── shutdown ─────────────────────────────────────────────────────────────
     logger.info("Task Management API shutting down")
 
-
 def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
@@ -50,6 +53,21 @@ def create_app() -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
     )
+    
+    # CORS
+    from fastapi.middleware.cors import CORSMiddleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # Simple Monitoring Middleware
+    from app.core.monitoring_middleware import MonitoringMiddleware
+    app.add_middleware(MonitoringMiddleware)
+
     app.add_middleware(LoggingMiddleware)
     app.include_router(api_router, prefix=settings.api_prefix)
     return app
@@ -86,3 +104,12 @@ def test_email() -> dict:
     if ok:
         return {"status": "ok", "message": "Test email sent successfully. Check your inbox."}
     return {"status": "error", "message": "Email failed — check the terminal logs for details."}
+
+
+monitoring_router = APIRouter(prefix="/monitoring", tags=["monitoring"])
+
+@monitoring_router.get("/health")
+async def health():
+    return {"status": "healthy", "message": "Monitoring works!"}
+
+app.include_router(monitoring_router)

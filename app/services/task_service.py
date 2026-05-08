@@ -1,26 +1,8 @@
+
 """
 task_service.py
 ===============
 Business-logic layer for Tasks.
-
-Responsibilities
-----------------
-- Create a task (admin / project_manager only)
-- Retrieve tasks with optional filtering by status, priority, and assignee_id
-- Retrieve a single task
-- Update a task
-    • Admin / project_manager → can change any field (title, description,
-      status, priority, assignee)
-    • Employee               → can ONLY update the status of their OWN task,
-                               and only along valid transitions
-- Delete a task (admin only)
-
-Status Lifecycle (enforced for all roles)
-------------------------------------------
-    todo  ──►  in_progress  ──►  done
-                              ◄──  (rollback allowed: done → in_progress)
-
-Invalid transitions raise HTTP 422.
 """
 
 from typing import Optional
@@ -40,25 +22,45 @@ from app.schemas.task_schemas import TaskCreate, TaskUpdate
 
 VALID_STATUSES = {"todo", "in_progress", "done"}
 
-# Maps current_status → set of statuses it may transition TO
 VALID_TRANSITIONS: dict[str, set[str]] = {
-    "todo":        {"in_progress"},
-    "in_progress": {"done", "todo"},   # can roll back to todo as well
-    "done":        {"in_progress"},    # can reopen
+    "todo": {"in_progress"},
+    "in_progress": {"done", "todo"},
+    "done": {"in_progress"},
 }
 
 
 # ---------------------------------------------------------------------------
-# Internal helpers
+# Helpers
 # ---------------------------------------------------------------------------
+
+def _extract_user_info(current_user):
+    """
+    Supports both:
+    - dict users
+    - SQLAlchemy user objects
+    """
+
+    if isinstance(current_user, dict):
+        return {
+            "id": current_user.get("id"),
+            "role": current_user.get("role"),
+        }
+
+    return {
+        "id": getattr(current_user, "id", None),
+        "role": getattr(current_user, "role", None),
+    }
+
 
 def _get_task_or_404(db: Session, task_id: int) -> TaskModel:
     task = db.query(TaskModel).filter(TaskModel.id == task_id).first()
+
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Task with id={task_id} not found.",
         )
+
     return task
 
 
@@ -74,20 +76,21 @@ def _validate_status(value: str) -> None:
 
 
 def _validate_transition(current: str, requested: str) -> None:
-    """Raise 422 when the requested transition is not allowed."""
     allowed = VALID_TRANSITIONS.get(current, set())
+
     if requested not in allowed:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=(
                 f"Invalid status transition: '{current}' → '{requested}'. "
-                f"Allowed next statuses from '{current}': {sorted(allowed) or 'none'}."
+                f"Allowed next statuses from '{current}': {sorted(allowed)}."
             ),
         )
 
 
 def _validate_priority(value: str) -> None:
     valid = {"low", "medium", "high"}
+
     if value not in valid:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -96,7 +99,13 @@ def _validate_priority(value: str) -> None:
 
 
 def _assert_project_exists(db: Session, project_id: int) -> None:
-    if not db.query(ProjectModel).filter(ProjectModel.id == project_id).first():
+    project = (
+        db.query(ProjectModel)
+        .filter(ProjectModel.id == project_id)
+        .first()
+    )
+
+    if not project:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Project with id={project_id} not found.",
@@ -104,7 +113,13 @@ def _assert_project_exists(db: Session, project_id: int) -> None:
 
 
 def _assert_user_exists(db: Session, user_id: int) -> None:
-    if not db.query(UserModel).filter(UserModel.id == user_id).first():
+    user = (
+        db.query(UserModel)
+        .filter(UserModel.id == user_id)
+        .first()
+    )
+
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"User with id={user_id} not found.",
@@ -112,217 +127,276 @@ def _assert_user_exists(db: Session, user_id: int) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Service functions
+# Create Task
 # ---------------------------------------------------------------------------
 
 def create_task(
     db: Session,
     payload: TaskCreate,
-    current_user: UserModel,
-) -> TaskModel:
-    """Only admin and project_manager can create tasks."""
-    if current_user.role not in ("admin", "project_manager"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admins and project managers can create tasks.",
-        )
+    current_user,
+):
+    user = _extract_user_info(current_user)
 
     _assert_project_exists(db, payload.project_id)
 
-    if current_user.role == "project_manager":
-        project = db.query(ProjectModel).filter(ProjectModel.id == payload.project_id).first()
-        if project and project.owner_id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Project managers can only create tasks in projects they own.",
-            )
+    if payload.status:
+        _validate_status(payload.status)
 
-    _assert_user_exists(db, payload.assignee_id)
+    if payload.priority:
+        _validate_priority(payload.priority)
 
-    initial_status = payload.status or "todo"
-    _validate_status(initial_status)
-    # New tasks must start from "todo"
-    if initial_status != "todo":
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="New tasks must start with status 'todo'.",
-        )
-
-    _validate_priority(payload.priority or "medium")
+    if payload.assignee_id:
+        _assert_user_exists(db, payload.assignee_id)
 
     task = TaskModel(
         title=payload.title,
         description=payload.description,
-        status=initial_status,
+        status=payload.status or "todo",
         priority=payload.priority or "medium",
         project_id=payload.project_id,
-        assignee_id=payload.assignee_id,
+        assignee_id=payload.assignee_id or user["id"],
     )
+
     db.add(task)
     db.commit()
     db.refresh(task)
+
     return task
 
 
+# ---------------------------------------------------------------------------
+# Get All Tasks
+# ---------------------------------------------------------------------------
+
 def get_all_tasks(
     db: Session,
-    current_user: UserModel,
+    current_user,
     status_filter: Optional[str] = None,
     priority_filter: Optional[str] = None,
     assignee_id_filter: Optional[int] = None,
-) -> list[TaskModel]:
-    """
-    Returns tasks with optional filters.
+):
+    user = _extract_user_info(current_user)
 
-    Employees only see tasks assigned to them.
-    Admins / project_managers see all tasks (then filter if requested).
-    """
     query = db.query(TaskModel)
 
-    # ── Role-based scope ──────────────────────────────────────────────────
-    if current_user.role == "employee":
-        # Employees are scoped to their own tasks regardless of other filters
-        query = query.filter(TaskModel.assignee_id == current_user.id)
-    elif current_user.role == "project_manager":
-        # Project managers only see tasks in their own projects
-        query = query.join(ProjectModel).filter(ProjectModel.owner_id == current_user.id)
-        if assignee_id_filter is not None:
-            _assert_user_exists(db, assignee_id_filter)
-            query = query.filter(TaskModel.assignee_id == assignee_id_filter)
-    else:
-        # Admins: honour optional assignee filter
-        if assignee_id_filter is not None:
-            _assert_user_exists(db, assignee_id_filter)
-            query = query.filter(TaskModel.assignee_id == assignee_id_filter)
+    # Employee
+    if user["role"] == "employee":
+        query = query.filter(
+            TaskModel.assignee_id == user["id"]
+        )
 
-    # ── Optional filters ──────────────────────────────────────────────────
+    # Project Manager
+    elif user["role"] == "project_manager":
+        query = (
+            query.join(ProjectModel)
+            .filter(ProjectModel.owner_id == user["id"])
+        )
+
+        if assignee_id_filter is not None:
+            _assert_user_exists(db, assignee_id_filter)
+
+            query = query.filter(
+                TaskModel.assignee_id == assignee_id_filter
+            )
+
+    # Admin
+    else:
+        if assignee_id_filter is not None:
+            _assert_user_exists(db, assignee_id_filter)
+
+            query = query.filter(
+                TaskModel.assignee_id == assignee_id_filter
+            )
+
+    # Optional filters
     if status_filter is not None:
         _validate_status(status_filter)
-        query = query.filter(TaskModel.status == status_filter)
+
+        query = query.filter(
+            TaskModel.status == status_filter
+        )
 
     if priority_filter is not None:
         _validate_priority(priority_filter)
-        query = query.filter(TaskModel.priority == priority_filter)
+
+        query = query.filter(
+            TaskModel.priority == priority_filter
+        )
 
     return query.all()
 
 
+# ---------------------------------------------------------------------------
+# Get Task By ID
+# ---------------------------------------------------------------------------
+
 def get_task_by_id(
     db: Session,
     task_id: int,
-    current_user: UserModel,
-) -> TaskModel:
+    current_user,
+):
+    user = _extract_user_info(current_user)
+
     task = _get_task_or_404(db, task_id)
 
-    # Employees can only view tasks assigned to them
-    if current_user.role == "employee" and task.assignee_id != current_user.id:
+    # Employee restriction
+    if (
+        user["role"] == "employee"
+        and task.assignee_id != user["id"]
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Employees can only view their own assigned tasks.",
+            detail="Employees can only view their own tasks.",
         )
 
-    # Project managers can only view tasks in their own projects
-    if current_user.role == "project_manager":
-        project = db.query(ProjectModel).filter(ProjectModel.id == task.project_id).first()
-        if project and project.owner_id != current_user.id:
+    # Project manager restriction
+    if user["role"] == "project_manager":
+        project = (
+            db.query(ProjectModel)
+            .filter(ProjectModel.id == task.project_id)
+            .first()
+        )
+
+        if project and project.owner_id != user["id"]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Project managers can only view tasks in projects they own.",
+                detail="You can only access tasks in your projects.",
             )
 
     return task
 
+
+# ---------------------------------------------------------------------------
+# Update Task
+# ---------------------------------------------------------------------------
 
 def update_task(
     db: Session,
     task_id: int,
     payload: TaskUpdate,
-    current_user: UserModel,
-) -> TaskModel:
-    """
-    Update logic by role:
-    • admin / project_manager → can update all fields + any valid transition
-    • employee                → can ONLY change status of their own task,
-                                along valid transitions
-    """
+    current_user,
+):
+    user = _extract_user_info(current_user)
+
     task = _get_task_or_404(db, task_id)
 
-    # ── Employee branch ───────────────────────────────────────────────────
-    if current_user.role == "employee":
-        if task.assignee_id != current_user.id:
+    # Employee restrictions
+    if user["role"] == "employee":
+
+        if task.assignee_id != user["id"]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Employees can only update tasks assigned to them.",
+                detail="Employees can only update their own tasks.",
             )
-        # Employees are restricted to status changes only
-        if any([
+
+        # Employees can only update status
+        restricted_fields = any([
             payload.title is not None,
             payload.description is not None,
             payload.priority is not None,
             payload.assignee_id is not None,
-        ]):
+        ])
+
+        if restricted_fields:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=(
-                    "Employees can only change the 'status' field of their tasks. "
-                    "Title, description, priority, and assignee changes are restricted."
-                ),
+                detail="Employees can only update task status.",
             )
+
         if payload.status is not None:
             _validate_status(payload.status)
-            _validate_transition(task.status, payload.status)
+
+            if payload.status != task.status:
+                _validate_transition(
+                    task.status,
+                    payload.status,
+                )
+
             task.status = payload.status
 
         db.commit()
         db.refresh(task)
+
         return task
 
-    # ── Admin / project_manager branch ───────────────────────────────────
-    if current_user.role == "project_manager":
-        project = db.query(ProjectModel).filter(ProjectModel.id == task.project_id).first()
-        if project and project.owner_id != current_user.id:
+    # Project manager restriction
+    if user["role"] == "project_manager":
+
+        project = (
+            db.query(ProjectModel)
+            .filter(ProjectModel.id == task.project_id)
+            .first()
+        )
+
+        if project and project.owner_id != user["id"]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Project managers can only update tasks in projects they own.",
+                detail="You can only update tasks in your projects.",
             )
 
+    # Status
     if payload.status is not None:
         _validate_status(payload.status)
+
         if payload.status != task.status:
-            _validate_transition(task.status, payload.status)
+            _validate_transition(
+                task.status,
+                payload.status,
+            )
+
         task.status = payload.status
 
+    # Title
     if payload.title is not None:
         task.title = payload.title
 
+    # Description
     if payload.description is not None:
         task.description = payload.description
 
+    # Priority
     if payload.priority is not None:
         _validate_priority(payload.priority)
+
         task.priority = payload.priority
 
+    # Assignee
     if payload.assignee_id is not None:
         _assert_user_exists(db, payload.assignee_id)
+
         task.assignee_id = payload.assignee_id
 
     db.commit()
     db.refresh(task)
+
     return task
 
+
+# ---------------------------------------------------------------------------
+# Delete Task
+# ---------------------------------------------------------------------------
 
 def delete_task(
     db: Session,
     task_id: int,
-    current_user: UserModel,
-) -> dict:
-    """Hard delete — admin only (second guard after route-level check)."""
-    if current_user.role != "admin":
+    current_user,
+):
+    user = _extract_user_info(current_user)
+
+    if user["role"] != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins can delete tasks.",
         )
+
     task = _get_task_or_404(db, task_id)
+
     db.delete(task)
     db.commit()
-    return {"message": f"Task '{task.title}' (id={task_id}) deleted successfully."}
+
+    return {
+        "message": (
+            f"Task '{task.title}' "
+            f"(id={task_id}) deleted successfully."
+        )
+    }
