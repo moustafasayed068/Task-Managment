@@ -1,0 +1,318 @@
+/* ===== Modern Task Management UI ===== */
+
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+
+:root {
+    --primary: #6366f1;
+    --primary-dark: #4338ca;
+    --secondary: #06b6d4;
+    --success: #10b981;
+    --danger: #ef4444;
+    --warning: #f59e0b;
+
+    --bg: #0f172a;
+    --card: rgba(255, 255, 255, 0.08);
+    --glass: rgba(255, 255, 255, 0.12);
+
+    --text: #f8fafc;
+    --muted: #cbd5e1;
+
+    --shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    --radius: 18px;
+}
+
+/* ===== Global ===== */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Poppins', sans-serif;
+    min-height: 100vh;
+    padding: 40px;
+
+    background:
+        radial-gradient(circle at top left, #1e293b, #0f172a 45%),
+        radial-gradient(circle at bottom right, #312e81, #0f172a 40%);
+
+    color: var(--text);
+}
+
+/* ===== Container ===== */
+
+.container {
+    max-width: 1100px;
+    margin: auto;
+
+    background: var(--card);
+    backdrop-filter: blur(18px);
+
+    border: 1px solid rgba(255, 255, 255, 0.1);
+
+    border-radius: var(--radius);
+
+    padding: 35px;
+
+    box-shadow: var(--shadow);
+
+    animation: fadeIn 0.7s ease;
+}
+
+/* ===== Heading ===== */
+
+h1,
+h2,
+h3 {
+    margin-bottom: 18px;
+    font-weight: 600;
+}
+
+h1 {
+    font-size: 2.5rem;
+    background: linear-gradient(90deg, #818cf8, #22d3ee);
+
+    background-clip: text;
+    -webkit-background-clip: text;
+
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+}
+
+/* ===== Form Layout ===== */
+
+.form-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+/* ===== Inputs ===== */
+
+input,
+textarea,
+select {
+    flex: 1;
+    min-width: 240px;
+
+    padding: 14px 16px;
+
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+
+    background: rgba(255, 255, 255, 0.06);
+
+    color: white;
+
+    outline: none;
+
+    transition: 0.3s ease;
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: #94a3b8;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    border-color: var(--secondary);
+    box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.15);
+    transform: translateY(-2px);
+}
+
+/* ===== Buttons ===== */
+
+button {
+    padding: 13px 22px;
+
+    border: none;
+    border-radius: 12px;
+
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+
+    color: white;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+
+    cursor: pointer;
+
+    transition: all 0.3s ease;
+
+    box-shadow: 0 6px 18px rgba(99, 102, 241, 0.35);
+}
+
+button:hover {
+    transform: translateY(-3px) scale(1.02);
+
+    box-shadow: 0 10px 25px rgba(99, 102, 241, 0.5);
+
+    background: linear-gradient(135deg, var(--primary-dark), var(--secondary));
+}
+
+button:active {
+    transform: scale(0.97);
+}
+
+/* ===== Logout Button ===== */
+
+.logout-btn {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+.logout-btn:hover {
+    background: linear-gradient(135deg, #dc2626, #b91c1c);
+}
+
+/* ===== Cards ===== */
+
+.project,
+.task {
+    position: relative;
+
+    background: rgba(255, 255, 255, 0.06);
+
+    border: 1px solid rgba(255, 255, 255, 0.08);
+
+    border-radius: 16px;
+
+    padding: 18px;
+
+    margin-top: 16px;
+
+    overflow: hidden;
+
+    transition: all 0.3s ease;
+}
+
+.project:hover,
+.task:hover {
+    transform: translateY(-4px);
+
+    background: rgba(255, 255, 255, 0.09);
+
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+}
+
+/* Colored Accent */
+
+.project::before,
+.task::before {
+    content: "";
+
+    position: absolute;
+    top: 0;
+    left: 0;
+
+    width: 5px;
+    height: 100%;
+
+    background: linear-gradient(to bottom,
+            var(--primary),
+            var(--secondary));
+}
+
+/* ===== Sections ===== */
+
+.section {
+    margin-top: 35px;
+}
+
+/* ===== Lists ===== */
+
+#projects-list,
+#tasks-list {
+    margin-top: 20px;
+}
+
+/* ===== Status Badges ===== */
+
+.badge {
+    display: inline-block;
+
+    padding: 6px 12px;
+
+    border-radius: 999px;
+
+    font-size: 0.8rem;
+    font-weight: 600;
+
+    margin-top: 10px;
+}
+
+.badge.success {
+    background: rgba(16, 185, 129, 0.2);
+    color: #6ee7b7;
+}
+
+.badge.warning {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fcd34d;
+}
+
+.badge.danger {
+    background: rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+}
+
+/* ===== Scrollbar ===== */
+
+::-webkit-scrollbar {
+    width: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #0f172a;
+}
+
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(to bottom,
+            var(--primary),
+            var(--secondary));
+
+    border-radius: 20px;
+}
+
+/* ===== Animation ===== */
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(25px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ===== Responsive ===== */
+
+@media (max-width: 768px) {
+
+    body {
+        padding: 20px;
+    }
+
+    .container {
+        padding: 22px;
+    }
+
+    h1 {
+        font-size: 2rem;
+    }
+
+    .form-group {
+        flex-direction: column;
+    }
+
+    input,
+    button {
+        width: 100%;
+    }
+}

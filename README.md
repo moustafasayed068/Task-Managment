@@ -501,3 +501,11 @@ SELECT * FROM tasks;              -- view all tasks
 ## 📄 License
 
 This project is developed for academic purposes as part of a university course.
+
+## 🚀 Docker Setup (Bonus Feature)
+
+### How to run the full stack with Docker
+
+```bash
+# From the project root folder
+docker-compose up --build

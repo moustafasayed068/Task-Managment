@@ -51,10 +51,16 @@ def _assert_can_modify(project: ProjectModel, current_user: UserModel) -> None:
 # ---------------------------------------------------------------------------
 # Service functions
 # ---------------------------------------------------------------------------
-
-def create_project(db: Session, payload: ProjectCreate, current_user: UserModel) -> ProjectModel:
+def create_project(db: Session, payload: ProjectCreate, current_user) -> ProjectModel:
     """Admin and project_manager can create projects."""
-    if current_user.role not in ("admin", "project_manager"):
+    
+    # Handle both Pydantic model and dict (current_user)
+    if isinstance(current_user, dict):
+        user_role = current_user.get("role")
+    else:
+        user_role = getattr(current_user, "role", None)
+
+    if user_role not in ("admin", "project_manager"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins and project managers can create projects.",
@@ -63,13 +69,12 @@ def create_project(db: Session, payload: ProjectCreate, current_user: UserModel)
     project = ProjectModel(
         name=payload.name,
         description=payload.description,
-        owner_id=current_user.id,
+        owner_id=current_user.id if not isinstance(current_user, dict) else current_user.get("id"),
     )
     db.add(project)
     db.commit()
     db.refresh(project)
     return project
-
 
 def get_all_projects(db: Session) -> list[ProjectModel]:
     """All authenticated users can read projects."""
