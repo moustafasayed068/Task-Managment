@@ -122,41 +122,52 @@
                 ]);
 
                 const health = await healthRes.json();
-                const stats = await statsRes.json();
 
-                document.getElementById('health').innerHTML = `✅ Healthy | Uptime: ${health.uptime || 'N/A'}`;
-                document.getElementById('requests').textContent = stats.total_requests || 0;
-                document.getElementById('errors').textContent = (stats.error_rate || 0) + "%";
-                document.getElementById('uptime').textContent = stats.uptime || "N/A";
+                let stats = {};
+                if (statsRes.ok) {
+                    stats = await statsRes.json();
+                } else {
+                    console.warn("Stats endpoint returned", statsRes.status);
+                }
+
+                // Update UI safely
+                document.getElementById('health').innerHTML = `✅ Healthy`;
+                document.getElementById('requests').textContent = stats.total_requests ?? 0;
+                document.getElementById('errors').textContent = (stats.error_rate ?? 0) + "%";
+                document.getElementById('uptime').textContent = stats.uptime || health.uptime || "--";
 
             } catch (e) {
+                console.error("Dashboard error:", e);
                 document.getElementById('health').innerHTML = "❌ Cannot connect to backend";
-                console.error(e);
             }
         }
 
         async function loadLogs() {
             try {
-                const res = await fetch(`${API}/monitoring/logs?limit=10`);
+                const res = await fetch(`${API}/monitoring/logs?limit=15`);
                 const data = await res.json();
 
                 let html = "";
                 if (data.recent_logs && data.recent_logs.length > 0) {
                     html = data.recent_logs.map(log => `
-            <div class="log">
-              <small>${log.time}</small> <strong>[${log.level}]</strong> ${log.message}
-            </div>
-          `).join('');
+                <div class="log">
+                    <small>${log.time}</small> 
+                    <strong style="color: ${log.level === 'ERROR' ? '#dc3545' : log.level === 'WARNING' ? '#ffc107' : '#28a745'}">
+                        [${log.level}]
+                    </strong> 
+                    ${log.message}
+                </div>
+            `).join('');
                 } else {
-                    html = "<p>No logs available yet.</p>";
+                    html = "<p>No logs yet. Make some API requests...</p>";
                 }
                 document.getElementById('logs').innerHTML = html;
             } catch (e) {
-                document.getElementById('logs').innerHTML = "<p style='color:red'>Error loading logs</p>";
+                document.getElementById('logs').innerHTML = "<p style='color:red'>Could not load logs</p>";
             }
         }
 
-        // Refresh every 4 seconds
+        // Start everything
         setInterval(refreshDashboard, 4000);
         refreshDashboard();
         loadLogs();
