@@ -509,3 +509,70 @@ This project is developed for academic purposes as part of a university course.
 ```bash
 # From the project root folder
 docker-compose up --build
+``` 
+
+# -------------------------------------------------------
+# 📋 TaskFlow - Task Management System
+
+A full-stack **Task Management System** built with **FastAPI** (Backend) + **HTML/CSS/JavaScript** (Frontend).
+
+---
+
+## 🚀 Quick Start Guide
+
+### 1. Clone the Project
+
+git clone https://github.com/moustafasayed068/Task-Managment.git
+cd Task-Managment
+
+### 2. Create & Activate Virtual Environment
+python -m venv .venv
+
+# Windows
+.venv\Scripts\activate
+
+# Mac/Linux
+source .venv/bin/activate
+
+### 3. Install Dependencies
+pip install -r requirements.txt
+
+### 4. Run the Application
+#Terminal 1 - Backend
+```bash
+    uvicorn app.main:app --host [IP_ADDRESS] --port 8000 --reload
+```
+
+#Terminal 2 - Frontend
+```bash
+    cd Frontend
+    python -m http.server 5500
+```
+Open in Browser:
+→ http://localhost:5500
+*Default Login:
+Username: admin
+Password: admin123
+
+### 🐳 Docker (Optional)
+docker-compose up --build
+Access:
+
+Frontend: http://localhost:5500
+Backend Docs: http://localhost:8000/docs
+
+### 📊 Monitoring Dashboard
+After logging in, go to:
+→ http://localhost:5500/monitoring.html
+It shows:
+
+- System Health
+- Total Requests & Error Rate
+- Live Logs
+- Uptime
+
+### 📝 Available Pages
+
+index.html → Main Application (Login + Projects + Tasks)
+monitoring.html → Live Monitoring Dashboard
+
