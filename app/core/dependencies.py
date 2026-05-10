@@ -24,24 +24,22 @@ def get_current_user(
 ):
     try:
         payload = decode_token(token)
-        
-        if payload is None:
+        if not payload:
             raise HTTPException(status_code=401, detail="Invalid token")
         
         user_id = payload.get("sub")
-
-        if user_id is None:
+        if not user_id:
             raise HTTPException(status_code=401, detail="Invalid token")
 
-    except (JWTError, TypeError):
+        user = _get_user_from_db(int(user_id), db)
+        
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        return user   # Always return UserModel object
+
+    except (JWTError, TypeError, ValueError):
         raise HTTPException(status_code=401, detail="Invalid token")
-
-    user = _get_user_from_db(int(user_id), db)
-
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    return user
 
 
 def require_role(required_role: str):
