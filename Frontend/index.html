@@ -4,229 +4,72 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Task Management System</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #f4f4f4;
-            margin: 0;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 1100px;
-            margin: auto;
-            background: white;
-            padding: 25px;
-            border-radius: 10px;
-            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
-        }
-
-        input,
-        select,
-        button {
-            padding: 10px;
-            margin: 8px 0;
-            font-size: 16px;
-        }
-
-        button {
-            background: #007bff;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-
-        .logout-btn {
-            background: #dc3545;
-        }
-
-        .section {
-            margin: 25px 0;
-            padding: 15px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            background: #fafafa;
-        }
-
-        .item {
-            padding: 12px;
-            margin: 8px 0;
-            background: #f8f9fa;
-            border-left: 5px solid #007bff;
-            border-radius: 5px;
-        }
-
-        .error {
-            color: red;
-            font-weight: bold;
-        }
-    </style>
+    <title>TaskFlow • Management</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
     <div class="container">
-        <h1>Task Management System</h1>
+        <header>
+            <h1>🌈 TaskFlow</h1>
+            <p>Stay Organized • Get Things Done</p>
+        </header>
 
-        <div id="auth-section">
-            <h2>Login</h2>
-            <input type="text" id="username" value="admin"><br><br>
-            <input type="password" id="password" value="admin123"><br><br>
-            <button onclick="login()">Login</button>
-            <p id="message"></p>
+        <!-- Auth Section -->
+        <div id="auth-section" class="auth-card">
+            <h2>🔑 Welcome Back</h2>
+            <input type="text" id="username" value="admin" placeholder="Username">
+            <input type="password" id="password" value="admin123" placeholder="Password">
+            <button onclick="login()" class="btn-primary">Login</button>
+            <p id="auth-message"></p>
         </div>
 
-        <div id="main-app" style="display:none;">
-            <button onclick="logout()" class="logout-btn">Logout</button>
+        <!-- Main App -->
+        <div id="main-app" style="display: none;">
+            <div class="top-bar">
+                <h2>Dashboard</h2>
+                <button onclick="logout()" class="btn-danger">Logout</button>
+            </div>
 
-            <div class="section">
-                <h2>Create Project</h2>
-                <input type="text" id="proj-name" placeholder="Project Name"><br>
-                <input type="text" id="proj-desc" placeholder="Description"><br>
-                <button onclick="createProject()">Create Project</button>
-                <p id="proj-error" class="error"></p>
+            <div class="grid-2">
+                <!-- Create Project -->
+                <div class="card colorful-card">
+                    <h3>➕ New Project</h3>
+                    <input type="text" id="proj-name" placeholder="Project Name">
+                    <input type="text" id="proj-desc" placeholder="Description (optional)">
+                    <button onclick="createProject()" class="btn-success">Create Project</button>
+                </div>
+
+                <!-- Create Task -->
+                <div class="card colorful-card">
+                    <h3>➕ New Task</h3>
+                    <input type="text" id="task-title" placeholder="Task Title">
+                    <input type="text" id="task-desc" placeholder="Description">
+                    <select id="task-status">
+                        <option value="todo">📋 To Do</option>
+                        <option value="in_progress">🔄 In Progress</option>
+                        <option value="done">✅ Done</option>
+                    </select>
+                    <input type="number" id="project-id" value="1" placeholder="Project ID">
+                    <button onclick="createTask()" class="btn-success">Create Task</button>
+                </div>
             </div>
 
             <div class="section">
-                <h2>Create Task</h2>
-                <input type="text" id="task-title" placeholder="Task Title"><br>
-                <input type="text" id="task-desc" placeholder="Description"><br>
-                <select id="task-status">
-                    <option value="todo">To Do</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="done">Done</option>
-                </select><br>
-                <input type="number" id="project-id" value="1" placeholder="Project ID"><br>
-                <button onclick="createTask()">Create Task</button>
-                <p id="task-error" class="error"></p>
+                <h2>📂 Projects</h2>
+                <button onclick="loadProjects()" class="btn-secondary">Refresh</button>
+                <div id="projects-list" class="list"></div>
             </div>
 
-            <button onclick="loadProjects()">🔄 Load Projects</button>
-            <div id="projects"></div>
-
-            <button onclick="loadTasks()">🔄 Load Tasks</button>
-            <div id="tasks"></div>
+            <div class="section">
+                <h2>📋 Tasks</h2>
+                <button onclick="loadTasks()" class="btn-secondary">Refresh</button>
+                <div id="tasks-list" class="list"></div>
+            </div>
         </div>
     </div>
 
-    <script>
-        let token = null;
-        const API_BASE = "http://127.0.0.1:8000";
-
-        async function login() {
-            const message = document.getElementById('message');
-            message.textContent = "Logging in...";
-
-            const formData = new FormData();
-            formData.append('username', document.getElementById('username').value);
-            formData.append('password', document.getElementById('password').value);
-
-            try {
-                const res = await fetch(`${API_BASE}/api/v1/auth/login`, { method: 'POST', body: formData });
-                const data = await res.json();
-
-                if (res.ok) {
-                    token = data.access_token;
-                    message.textContent = "✅ Login Successful!";
-                    document.getElementById('auth-section').style.display = 'none';
-                    document.getElementById('main-app').style.display = 'block';
-                    loadProjects();
-                    loadTasks();
-                } else {
-                    message.textContent = data.detail || "Login failed";
-                }
-            } catch (err) {
-                message.textContent = "Cannot connect to backend";
-            }
-        }
-
-        async function createProject() {
-            document.getElementById('proj-error').textContent = "";
-            const name = document.getElementById('proj-name').value.trim();
-            if (!name) return alert("Project name required");
-
-            try {
-                const res = await fetch(`${API_BASE}/api/v1/v2/projects/`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, description: document.getElementById('proj-desc').value })
-                });
-                if (res.ok) {
-                    alert("✅ Project Created!");
-                    loadProjects();
-                } else {
-                    document.getElementById('proj-error').textContent = "Failed: " + res.status;
-                }
-            } catch (e) {
-                document.getElementById('proj-error').textContent = "Connection error";
-            }
-        }
-
-        async function createTask() {
-            document.getElementById('task-error').textContent = "";
-            const title = document.getElementById('task-title').value.trim();
-            if (!title) return alert("Task title required");
-
-            try {
-                const res = await fetch(`${API_BASE}/api/v1/v2/tasks/`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        title: title,
-                        description: document.getElementById('task-desc').value,
-                        status: document.getElementById('task-status').value,
-                        project_id: parseInt(document.getElementById('project-id').value),
-                        assignee_id: 1
-                    })
-                });
-                if (res.ok) {
-                    alert("✅ Task Created!");
-                    loadTasks();
-                } else {
-                    document.getElementById('task-error').textContent = "Failed: " + res.status;
-                }
-            } catch (e) {
-                document.getElementById('task-error').textContent = "Connection error";
-            }
-        }
-
-        async function loadProjects() {
-            try {
-                const res = await fetch(`${API_BASE}/api/v1/v2/projects/`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (!res.ok) throw new Error("Failed");
-                const data = await res.json();
-                document.getElementById('projects').innerHTML = data.map(p =>
-                    `<div class="item"><strong>${p.name}</strong> (ID: ${p.id})<br>${p.description || ''}</div>`
-                ).join('') || "<p>No projects found.</p>";
-            } catch (e) {
-                document.getElementById('projects').innerHTML = `<p class="error">Error loading projects</p>`;
-            }
-        }
-
-        async function loadTasks() {
-            try {
-                const res = await fetch(`${API_BASE}/api/v1/v2/tasks/`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (!res.ok) throw new Error("Failed");
-                const data = await res.json();
-                document.getElementById('tasks').innerHTML = data.map(t =>
-                    `<div class="item"><strong>${t.title}</strong> (${t.status}) - Project ${t.project_id}</div>`
-                ).join('') || "<p>No tasks found yet.</p>";
-            } catch (e) {
-                document.getElementById('tasks').innerHTML = `<p class="error">Error loading tasks</p>`;
-            }
-        }
-
-        function logout() {
-            token = null;
-            document.getElementById('auth-section').style.display = 'block';
-            document.getElementById('main-app').style.display = 'none';
-        }
-    </script>
+    <script src="script.js"></script>
 </body>
 
 </html>
