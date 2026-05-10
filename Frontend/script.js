@@ -25,6 +25,7 @@ async function login() {
             loadTasks();
         } else {
             message.textContent = data.detail || "Login failed";
+            message.style.color = "red";
         }
     } catch (err) {
         message.textContent = "Cannot connect to backend";
@@ -40,39 +41,52 @@ function getHeaders() {
 
 // ==================== PROJECTS ====================
 async function createProject() {
-    const name = document.getElementById('proj-name').value;
+    const name = document.getElementById('proj-name').value.trim();
     if (!name) return alert("Project name is required");
 
     try {
         const res = await fetch(`${API_BASE}/api/v1/v2/projects/`, {
             method: 'POST',
             headers: getHeaders(),
-            body: JSON.stringify({ name, description: document.getElementById('proj-desc').value })
+            body: JSON.stringify({
+                name,
+                description: document.getElementById('proj-desc').value
+            })
         });
         if (res.ok) {
-            alert("Project Created!");
+            alert("✅ Project Created!");
             loadProjects();
+        } else {
+            alert("Failed to create project");
         }
     } catch (e) { alert("Error creating project"); }
 }
 
 async function loadProjects() {
-    const res = await fetch(`${API_BASE}/api/v1/v2/projects/`, { headers: getHeaders() });
-    const projects = await res.json();
-    let html = '';
-    projects.forEach(p => {
-        html += `
-            <div class="project">
-                <strong>${p.name}</strong> (ID: ${p.id})<br>
-                ${p.description || ''}
-                <button onclick="deleteProject(${p.id})" style="background:#ef4444; font-size:0.8rem;">Delete</button>
-            </div>`;
-    });
-    document.getElementById('projects-list').innerHTML = html || '<p>No projects found.</p>';
+    try {
+        const res = await fetch(`${API_BASE}/api/v1/v2/projects/`, { headers: getHeaders() });
+        const projects = await res.json();
+
+        let html = '';
+        projects.forEach(p => {
+            html += `
+                <div class="project">
+                    <strong>${p.name}</strong> (ID: ${p.id})<br>
+                    ${p.description || ''}
+                    <button onclick="deleteProject(${p.id})" class="btn-danger" style="font-size:0.85rem; padding:6px 12px; margin-top:8px;">
+                        🗑 Delete
+                    </button>
+                </div>`;
+        });
+        document.getElementById('projects-list').innerHTML = html || '<p>No projects found.</p>';
+    } catch (e) {
+        document.getElementById('projects-list').innerHTML = '<p style="color:red">Error loading projects</p>';
+    }
 }
 
 async function deleteProject(id) {
-    if (!confirm("⚠️ Delete this project and all its tasks?")) return;
+    if (!confirm("Delete this project?\n\nWarning: This will also delete all tasks inside it!"))
+        return;
 
     try {
         const res = await fetch(`${API_BASE}/api/v1/v2/projects/${id}`, {
@@ -80,19 +94,28 @@ async function deleteProject(id) {
             headers: getHeaders()
         });
 
+        console.log("Project Delete Status:", res.status);   // For debugging
+
         if (res.ok) {
-            alert("✅ Project deleted successfully");
+            alert("✅ Project deleted successfully!");
             loadProjects();
+        } else if (res.status === 403) {
+            alert("❌ Permission Denied!\nYou need to be logged in as **Admin** to delete projects.");
+        } else if (res.status === 409) {
+            alert("❌ Cannot delete project because it contains tasks.\nDelete the tasks first.");
         } else {
-            alert("Failed to delete project (Check if it has tasks)");
+            const error = await res.json().catch(() => ({}));
+            alert("Delete failed: " + (error.detail || res.status));
         }
     } catch (e) {
-        alert("Error deleting project");
+        console.error(e);
+        alert("Connection error. Make sure backend is running and you opened frontend via http://localhost:5500");
     }
 }
+
 // ==================== TASKS ====================
 async function createTask() {
-    const title = document.getElementById('task-title').value;
+    const title = document.getElementById('task-title').value.trim();
     if (!title) return alert("Task title is required");
 
     try {
@@ -103,50 +126,63 @@ async function createTask() {
                 title: title,
                 description: document.getElementById('task-desc').value,
                 status: document.getElementById('task-status').value,
-                project_id: parseInt(document.getElementById('project-id').value),
+                project_id: parseInt(document.getElementById('project-id').value) || 1,
                 assignee_id: 1
             })
         });
         if (res.ok) {
-            alert("Task Created!");
+            alert("✅ Task Created!");
             loadTasks();
         }
     } catch (e) { alert("Error creating task"); }
 }
 
 async function loadTasks() {
-    const res = await fetch(`${API_BASE}/api/v1/v2/tasks/`, { headers: getHeaders() });
-    const tasks = await res.json();
-    let html = '';
-    tasks.forEach(t => {
-        html += `
-            <div class="task">
-                <strong>${t.title}</strong> - <span style="color:#22d3ee">${t.status}</span><br>
-                ${t.description || ''}
-                <button onclick="updateTaskStatus(${t.id}, 'in_progress')">In Progress</button>
-                <button onclick="updateTaskStatus(${t.id}, 'done')">Done</button>
-                <button onclick="deleteTask(${t.id})" style="background:#ef4444;">Delete</button>
-            </div>`;
-    });
-    document.getElementById('tasks-list').innerHTML = html || '<p>No tasks found.</p>';
+    try {
+        const res = await fetch(`${API_BASE}/api/v1/v2/tasks/`, { headers: getHeaders() });
+        const tasks = await res.json();
+
+        let html = '';
+        tasks.forEach(t => {
+            html += `
+                <div class="task">
+                    <strong>${t.title}</strong> - <span style="color:#22d3ee">${t.status}</span><br>
+                    ${t.description || ''}
+                    <button onclick="updateTaskStatus(${t.id}, 'in_progress')" style="background:#f59e0b">In Progress</button>
+                    <button onclick="updateTaskStatus(${t.id}, 'done')" style="background:#10b981">Done</button>
+                    <button onclick="deleteTask(${t.id})" class="btn-danger" style="font-size:0.85rem;">🗑 Delete</button>
+                </div>`;
+        });
+        document.getElementById('tasks-list').innerHTML = html || '<p>No tasks found.</p>';
+    } catch (e) {
+        document.getElementById('tasks-list').innerHTML = '<p style="color:red">Error loading tasks</p>';
+    }
 }
 
 async function updateTaskStatus(id, newStatus) {
-    await fetch(`${API_BASE}/api/v1/v2/tasks/${id}`, {
-        method: 'PUT',
-        headers: getHeaders(),
-        body: JSON.stringify({ status: newStatus })
-    });
-    loadTasks();
+    try {
+        await fetch(`${API_BASE}/api/v1/v2/tasks/${id}`, {
+            method: 'PUT',
+            headers: getHeaders(),
+            body: JSON.stringify({ status: newStatus })
+        });
+        loadTasks();
+    } catch (e) {
+        alert("Failed to update task");
+    }
 }
 
 async function deleteTask(id) {
     if (!confirm("Delete this task?")) return;
-    await fetch(`${API_BASE}/api/v1/v2/tasks/${id}`, {
-        method: 'DELETE',
-        headers: getHeaders()
-    });
-    loadTasks();
+    try {
+        await fetch(`${API_BASE}/api/v1/v2/tasks/${id}`, {
+            method: 'DELETE',
+            headers: getHeaders()
+        });
+        loadTasks();
+    } catch (e) {
+        alert("Failed to delete task");
+    }
 }
 
 function logout() {

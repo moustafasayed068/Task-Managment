@@ -1,5 +1,3 @@
-from app import models
-from app.models import user_models
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, APIRouter
 from datetime import datetime
@@ -11,11 +9,11 @@ from app.api.router_api import api_router
 from app.core.config_core import settings
 from app.db.base_db import Base
 from app.db.session_db import engine
+from fastapi.middleware.cors import CORSMiddleware
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # ── Startup ──────────────────────────────────────────────────────────────
     intercept_stdlib_loggers()
     Base.metadata.create_all(bind=engine)
 
@@ -42,7 +40,6 @@ async def lifespan(app: FastAPI):
 
     logger.info("✅ Task Management API started successfully")
     yield
-    # ── Shutdown ─────────────────────────────────────────────────────────────
     logger.info("Task Management API shutting down")
 
 
@@ -53,26 +50,35 @@ def create_app() -> FastAPI:
         version="1.0.0",
         lifespan=lifespan,
     )
+        # === FORCE CORS FIX ===
+    @app.middleware("http")
+    async def add_cors_headers(request, call_next):
+        response = await call_next(request)
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        return response
 
-    # CORS
-    from fastapi.middleware.cors import CORSMiddleware
+    # ====================== CORS (MUST BE FIRST) ======================
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=["*", "http://localhost:5500", "http://127.0.0.1:5500"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["*"],
     )
+    # =================================================================
 
-    # Important: Add Monitoring Middleware FIRST
+    # Middlewares
     app.add_middleware(MonitoringMiddleware)
     app.add_middleware(LoggingMiddleware)
 
-    # Include main API router
+    # Routers
     app.include_router(api_router, prefix=settings.api_prefix)
 
-    # Monitoring Dashboard Routes (Directly under /monitoring)
-    # ====================== MONITORING DASHBOARD ROUTES ======================
+    # Monitoring Dashboard
     monitoring_router = APIRouter(prefix="/monitoring", tags=["monitoring"])
 
     @monitoring_router.get("/health")
@@ -92,9 +98,7 @@ def create_app() -> FastAPI:
         from app.core.monitoring_middleware import get_stats
         data = get_stats()
         uptime = datetime.now() - data["start_time"]
-        
-        error_rate = round((data["total_errors"] / data["total_requests"] * 100), 2) \
-            if data["total_requests"] > 0 else 0.0
+        error_rate = round((data["total_errors"] / data["total_requests"] * 100), 2) if data["total_requests"] > 0 else 0.0
 
         return {
             "total_requests": data["total_requests"],
@@ -105,67 +109,32 @@ def create_app() -> FastAPI:
 
     @monitoring_router.get("/logs")
     async def get_recent_logs(limit: int = 10):
-        """Read from actual log files (app.log)"""
         import os
         from datetime import datetime
-        
         try:
             log_dir = "logs"
             all_logs = []
-            
-            # Check for app.log and errors.log
             possible_files = ["app.log", "errors.log"]
             
             for filename in possible_files:
                 filepath = os.path.join(log_dir, filename)
                 if os.path.exists(filepath):
-                    try:
-                        with open(filepath, 'r', encoding='utf-8') as f:
-                            lines = f.readlines()[-150:]  # Last 150 lines
-                            
-                        for line in lines:
-                            line = line.strip()
-                            if line and " | " in line:
-                                try:
-                                    parts = line.split(" | ", 3)
-                                    if len(parts) >= 3:
-                                        all_logs.append({
-                                            "time": parts[0],
-                                            "level": parts[1].strip(),
-                                            "message": parts[-1]
-                                        })
-                                except:
-                                    continue
-                    except:
-                        continue
-
-            # If no parsed logs, return recent sample
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        lines = f.readlines()[-100:]
+                    for line in lines:
+                        if " | " in line:
+                            parts = line.strip().split(" | ", 3)
+                            if len(parts) >= 3:
+                                all_logs.append({
+                                    "time": parts[0],
+                                    "level": parts[1].strip(),
+                                    "message": parts[-1]
+                                })
             if not all_logs:
-                all_logs = [
-                    {
-                        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "level": "INFO",
-                        "message": "Real logs are being written to app.log"
-                    },
-                    {
-                        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "level": "INFO",
-                        "message": "Monitoring dashboard is now connected"
-                    }
-                ]
-
-            # Return newest logs first
+                all_logs = [{"time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "level": "INFO", "message": "No logs yet. Make API calls."}]
             return {"recent_logs": all_logs[-limit:]}
-
-        except Exception as e:
-            return {
-                "recent_logs": [{
-                    "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "level": "ERROR",
-                    "message": f"Could not read logs: {str(e)}"
-                }]
-            }
-    # =====================================================================
+        except:
+            return {"recent_logs": []}
 
     app.include_router(monitoring_router)
 
