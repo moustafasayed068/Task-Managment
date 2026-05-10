@@ -573,6 +573,6 @@ It shows:
 
 ### 📝 Available Pages
 
-index.html → Main Application (Login + Projects + Tasks)
-monitoring.html → Live Monitoring Dashboard
+- index.html → Main Application (Login + Projects + Tasks)
+- monitoring.html → Live Monitoring Dashboard
 
