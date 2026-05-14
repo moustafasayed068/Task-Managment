@@ -27,6 +27,7 @@ Workflow Validation (all roles)
   Invalid transitions → HTTP 422
 """
 
+import json
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, status
@@ -38,6 +39,8 @@ from app.db.session_db import get_db
 from app.models.user_models import UserModel
 from app.schemas.task_schemas import TaskCreate, TaskResponse, TaskUpdate
 from app.services import task_service
+from app.core.cache_core import cache_task_by_id, invalidate_task_cache, _cache_get, _cache_setex
+from app.core.config_core import settings
 
 router = APIRouter()
 
@@ -63,7 +66,9 @@ def create_task(
     - **Admin / Project Manager**: can create tasks in any project.
     - **Employee**: forbidden (HTTP 403).
     """
-    return task_service.create_task(db, payload, current_user)
+    result = task_service.create_task(db, payload, current_user)
+    invalidate_task_cache()
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -98,13 +103,26 @@ def get_tasks(
     - **Employee**: always scoped to their own tasks; `assignee_id` param is ignored.
     - **Admin / Project Manager**: see all tasks; optional `assignee_id` filter applies.
     """
-    return task_service.get_all_tasks(
+    user_id = current_user.get("id") if isinstance(current_user, dict) else getattr(current_user, "id", 0)
+    cache_key = f"cache:tasks:all:u{user_id}:s{status_filter}:p{priority_filter}:a{assignee_id}"
+
+    cached_data = _cache_get(cache_key)
+    if cached_data:
+        return json.loads(cached_data)
+
+    result = task_service.get_all_tasks(
         db,
         current_user,
         status_filter=status_filter,
         priority_filter=priority_filter,
         assignee_id_filter=assignee_id,
     )
+
+    if result:
+        data = [{k: v for k, v in item.__dict__.items() if not k.startswith('_')} if hasattr(item, '__dict__') else item for item in result]
+        _cache_setex(cache_key, settings.cache_task_ttl, json.dumps(data, default=str))
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -115,6 +133,7 @@ def get_tasks(
     response_model=TaskResponse,
     summary="Get a single task by ID (role-scoped)",
 )
+@cache_task_by_id
 def get_task(
     task_id: int,
     db: Session = Depends(get_db),
@@ -158,7 +177,9 @@ def update_task(
     `todo → in_progress → done` (rollbacks also allowed).
     Invalid transitions return HTTP 422.
     """
-    return task_service.update_task(db, task_id, payload, current_user)
+    result = task_service.update_task(db, task_id, payload, current_user)
+    invalidate_task_cache(task_id)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -180,4 +201,6 @@ def delete_task(
     - **Admin**: can delete any task.
     - **Project Manager / Employee**: forbidden (HTTP 403).
     """
-    return task_service.delete_task(db, task_id, current_user)
+    result = task_service.delete_task(db, task_id, current_user)
+    invalidate_task_cache(task_id)
+    return result

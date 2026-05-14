@@ -23,6 +23,7 @@ from app.db.session_db import get_db
 from app.models.user_models import UserModel
 from app.schemas.project_schemas import ProjectCreate, ProjectResponse
 from app.services import project_service
+from app.core.cache_core import cache_project_by_id, cache_all_projects, invalidate_project_cache
 
 router = APIRouter()
 
@@ -48,7 +49,9 @@ def create_project(
     - **Project Manager**: creates projects; becomes the owner.
     - **Employee**: forbidden (HTTP 403).
     """
-    return project_service.create_project(db, payload, current_user)
+    result = project_service.create_project(db, payload, current_user)
+    invalidate_project_cache()
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -59,6 +62,7 @@ def create_project(
     response_model=list[ProjectResponse],
     summary="List all projects (any authenticated user)",
 )
+@cache_all_projects
 def get_projects(
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(require_any_authenticated()),
@@ -75,6 +79,7 @@ def get_projects(
     response_model=ProjectResponse,
     summary="Get a single project by ID (any authenticated user)",
 )
+@cache_project_by_id
 def get_project(
     project_id: int,
     db: Session = Depends(get_db),
@@ -105,7 +110,9 @@ def update_project(
     - **Project Manager**: can update only the projects they own.
     - **Employee**: forbidden (HTTP 403).
     """
-    return project_service.update_project(db, project_id, payload, current_user)
+    result = project_service.update_project(db, project_id, payload, current_user)
+    invalidate_project_cache(project_id)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -127,4 +134,6 @@ def delete_project(
     - **Admin**: can delete any project.
     - **Project Manager / Employee**: forbidden (HTTP 403).
     """
-    return project_service.delete_project(db, project_id, current_user)
+    result = project_service.delete_project(db, project_id, current_user)
+    invalidate_project_cache(project_id)
+    return result

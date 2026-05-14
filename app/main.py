@@ -17,24 +17,29 @@ async def lifespan(app: FastAPI):
     intercept_stdlib_loggers()
     Base.metadata.create_all(bind=engine)
 
+    # Health check for Redis connection on startup
+    from app.core.cache_core import check_redis_health
+    check_redis_health()
+
     # Seed default admin
     from app.db.session_db import SessionLocal
     from app.models.user_models import UserModel
     from app.core.security import hash_password
 
     with SessionLocal() as db:
-        admin = db.query(UserModel).filter(UserModel.username == "admin").first()
+        admin_username = settings.default_admin_user
+        admin = db.query(UserModel).filter(UserModel.username == admin_username).first()
         if not admin:
             logger.info("Creating default admin account...")
             new_admin = UserModel(
-                username="admin",
-                email="admin@example.com",
-                password_hash=hash_password("admin123"),
+                username=admin_username,
+                email=f"{admin_username}@example.com",
+                password_hash=hash_password(settings.default_admin_password),
                 role="admin"
             )
             db.add(new_admin)
             db.commit()
-            logger.info("Default admin created: admin / admin123")
+            logger.info(f"Default admin created: {admin_username}")
         else:
             logger.debug("Admin user already exists")
 
@@ -50,30 +55,21 @@ def create_app() -> FastAPI:
         version="1.0.0",
         lifespan=lifespan,
     )
-        # === FORCE CORS FIX ===
-    @app.middleware("http")
-    async def add_cors_headers(request, call_next):
-        response = await call_next(request)
-        response.headers["Access-Control-Allow-Origin"] = "*"
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "*"
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-        return response
+        # Middlewares (order matters: last added = first to run)
+    # LoggingMiddleware and MonitoringMiddleware run AFTER CORS
+    app.add_middleware(LoggingMiddleware)
+    app.add_middleware(MonitoringMiddleware)
 
-    # ====================== CORS (MUST BE FIRST) ======================
+    # ====================== CORS (MUST be added last = runs first) ======================
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*", "http://localhost:5500", "http://127.0.0.1:5500"],
-        allow_credentials=True,
+        allow_origins=["*"],
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
         expose_headers=["*"],
     )
-    # =================================================================
-
-    # Middlewares
-    app.add_middleware(MonitoringMiddleware)
-    app.add_middleware(LoggingMiddleware)
+    # ====================================================================================
 
     # Routers
     app.include_router(api_router, prefix=settings.api_prefix)
@@ -120,7 +116,21 @@ def create_app() -> FastAPI:
                 filepath = os.path.join(log_dir, filename)
                 if os.path.exists(filepath):
                     with open(filepath, 'r', encoding='utf-8') as f:
-                        lines = f.readlines()[-100:]
+                        # Safely read just the end of the file
+                        # This avoids loading massive log files into memory
+                        f.seek(0, os.SEEK_END)
+                        file_size = f.tell()
+                        
+                        # Read at most 10KB from the end
+                        read_size = min(10240, file_size)
+                        f.seek(file_size - read_size)
+                        lines = f.readlines()
+                        
+                        # Ensure we get complete lines and take the last 100
+                        if file_size > read_size:
+                            lines = lines[1:]  # First line might be partial
+                        lines = lines[-100:]
+                        
                     for line in lines:
                         if " | " in line:
                             parts = line.strip().split(" | ", 3)
@@ -133,7 +143,8 @@ def create_app() -> FastAPI:
             if not all_logs:
                 all_logs = [{"time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "level": "INFO", "message": "No logs yet. Make API calls."}]
             return {"recent_logs": all_logs[-limit:]}
-        except:
+        except Exception as e:
+            logger.error(f"Failed to read logs: {e}")
             return {"recent_logs": []}
 
     app.include_router(monitoring_router)

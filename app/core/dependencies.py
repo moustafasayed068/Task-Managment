@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, status, BackgroundTasks
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
 
@@ -45,6 +45,7 @@ def get_current_user(
 def require_role(required_role: str):
     def role_checker(
         request: Request,
+        background_tasks: BackgroundTasks,
         current_user: UserModel = Depends(get_current_user),
     ):
         if current_user.role != required_role:
@@ -58,9 +59,9 @@ def require_role(required_role: str):
                 client_ip, endpoint, required_role,
             )
 
-            # Synchronous email alert for unauthorized access
             from app.services.email_service import send_unauthorized_access_alert
-            send_unauthorized_access_alert(
+            background_tasks.add_task(
+                send_unauthorized_access_alert,
                 username=current_user.username,
                 ip_address=client_ip,
                 role=current_user.role,
