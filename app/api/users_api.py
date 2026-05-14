@@ -14,6 +14,16 @@ def get_me(current_user: UserModel = Depends(get_current_user)):
     return current_user
 
 
+# get all users (for dropdowns)
+@router.get("/")
+def get_users(
+    current_user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    users = db.query(UserModel).all()
+    return [{"id": u.id, "username": u.username, "role": u.role} for u in users]
+
+
 # delete user (admin only)
 @router.delete("/{user_id}")
 def delete_user(

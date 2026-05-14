@@ -17,11 +17,15 @@
 
         <!-- Auth Section -->
         <div id="auth-section" class="auth-card">
-            <h2>🔑 Welcome Back</h2>
+            <h2 id="auth-title">🔑 Welcome Back</h2>
             <input type="text" id="username" value="admin" placeholder="Username">
+            <input type="email" id="email" placeholder="Email (for registration)" style="display: none;">
             <input type="password" id="password" value="admin123" placeholder="Password">
-            <button onclick="login()" class="btn-primary">Login</button>
+            <button id="auth-btn" onclick="login()" class="btn-primary">Login</button>
             <p id="auth-message"></p>
+            <p style="font-size: 0.9rem; text-align: center; margin-top: 10px;">
+                <a href="#" id="toggle-auth" onclick="toggleAuthMode()" style="color: #22d3ee; text-decoration: none;">Don't have an account? Register</a>
+            </p>
         </div>
 
         <!-- Main App -->
@@ -33,40 +37,35 @@
 
             <div class="grid-2">
                 <!-- Create Project -->
-                <div class="card colorful-card">
+                <div class="card colorful-card" style="grid-column: span 2;">
                     <h3>➕ New Project</h3>
                     <input type="text" id="proj-name" placeholder="Project Name">
                     <input type="text" id="proj-desc" placeholder="Description (optional)">
                     <button onclick="createProject()" class="btn-success">Create Project</button>
                 </div>
-
-                <!-- Create Task -->
-                <div class="card colorful-card">
-                    <h3>➕ New Task</h3>
-                    <input type="text" id="task-title" placeholder="Task Title">
-                    <input type="text" id="task-desc" placeholder="Description">
-                    <select id="task-status">
-                        <option value="todo">📋 To Do</option>
-                        <option value="in_progress">🔄 In Progress</option>
-                        <option value="done">✅ Done</option>
-                    </select>
-                    <input type="number" id="project-id" value="1" placeholder="Project ID">
-                    <button onclick="createTask()" class="btn-success">Create Task</button>
-                </div>
             </div>
 
             <div class="section">
-                <h2>📂 Projects</h2>
-                <button onclick="loadProjects()" class="btn-secondary">Refresh</button>
+                <h2>📂 Projects & Tasks</h2>
+                <button onclick="loadProjectsAndTasks()" class="btn-secondary">Refresh Dashboard</button>
                 <div id="projects-list" class="list"></div>
             </div>
-
-            <div class="section">
-                <h2>📋 Tasks</h2>
-                <button onclick="loadTasks()" class="btn-secondary">Refresh</button>
-                <div id="tasks-list" class="list"></div>
-            </div>
         </div>
+
+        <!-- Task Creation Modal -->
+        <dialog id="task-modal" style="border: none; border-radius: 8px; padding: 20px; background: #1e293b; color: white; width: 400px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+            <h3 style="margin-top: 0;">➕ Add Task</h3>
+            <input type="text" id="modal-task-title" placeholder="Task Title" style="width: 100%; margin-bottom: 10px;">
+            <input type="text" id="modal-task-desc" placeholder="Description (optional)" style="width: 100%; margin-bottom: 10px;">
+            <label for="modal-task-assignee" style="font-size: 0.9rem; color: #94a3b8; display: block; margin-bottom: 5px;">Assign to:</label>
+            <select id="modal-task-assignee" style="width: 100%; margin-bottom: 15px; padding: 10px; border-radius: 6px; background: #0f172a; color: white; border: 1px solid #334155;">
+                <option value="">Loading users...</option>
+            </select>
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button onclick="closeTaskModal()" class="btn-secondary" style="margin: 0;">Cancel</button>
+                <button onclick="submitTaskModal()" class="btn-success" style="margin: 0;">Create</button>
+            </div>
+        </dialog>
     </div>
 
     <script src="script.js"></script>

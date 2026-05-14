@@ -1,8 +1,12 @@
 from pathlib import Path
 from pydantic_settings import BaseSettings
 
+import os
+
 _ENV_FILE = Path(__file__).resolve().parent.parent.parent / ".env"
 
+def is_docker():
+    return os.path.exists('/.dockerenv')
 
 class Settings(BaseSettings):
     app_name: str = "Task Management API"
@@ -11,6 +15,9 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     database_url: str = "sqlite:///./task_management.db"
+
+    default_admin_user: str = "admin"
+    default_admin_password: str = "admin123"
 
     redis_host: str = "localhost"
     redis_port: int = 6379
