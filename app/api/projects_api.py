@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.db.session_db import get_db
 from app.models.project_models import ProjectModel
 from app.schemas.project_schemas import ProjectCreate, ProjectResponse
+from app.schemas.user_schemas import CurrentUser
 from app.core.dependencies import get_current_user
 from app.models.user_models import UserModel
 from app.core.cache_core import (
@@ -32,7 +33,7 @@ def _get_all_projects(db: Session):
 def create_project(
     project: ProjectCreate,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     new_project = ProjectModel(
         name=project.name,
@@ -53,7 +54,7 @@ def create_project(
 @router.get("/", response_model=list[ProjectResponse])
 def get_projects(
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     return _get_all_projects(db)
 
@@ -63,7 +64,7 @@ def get_projects(
 def get_project(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     project = _get_project_by_id(project_id, db)
     if not project:
@@ -77,7 +78,7 @@ def update_project(
     project_id: int,
     project_update: ProjectCreate,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     project = db.query(ProjectModel).filter(ProjectModel.id == project_id).first()
     if not project:
@@ -95,7 +96,7 @@ def update_project(
 def delete_project(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     project = db.query(ProjectModel).filter(ProjectModel.id == project_id).first()
     if not project:

@@ -10,6 +10,7 @@ from app.core.config_core import settings
 from app.db.base_db import Base
 from app.db.session_db import engine
 from fastapi.middleware.cors import CORSMiddleware
+from app.api.monitoring_api import router as monitoring_router
 
 
 @asynccontextmanager
@@ -60,93 +61,25 @@ def create_app() -> FastAPI:
     app.add_middleware(LoggingMiddleware)
     app.add_middleware(MonitoringMiddleware)
 
-    # ====================== CORS (MUST be added last = runs first) ======================
+    # ====================== CORS (Runs first) ======================
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=False,
+        allow_origins=[
+            "http://localhost:5500",
+            "http://127.0.0.1:5500",
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
+            "*",
+        ],
+        allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
         expose_headers=["*"],
     )
-    # ====================================================================================
+    # ===============================================================
 
-    # Routers
+    # Routers are included after middlewares
     app.include_router(api_router, prefix=settings.api_prefix)
-
-    # Monitoring Dashboard
-    monitoring_router = APIRouter(prefix="/monitoring", tags=["monitoring"])
-
-    @monitoring_router.get("/health")
-    async def health():
-        from app.core.monitoring_middleware import get_stats
-        data = get_stats()
-        uptime = datetime.now() - data["start_time"]
-        return {
-            "status": "healthy",
-            "uptime": str(uptime).split('.')[0],
-            "timestamp": datetime.now().isoformat(),
-            "total_requests": data["total_requests"]
-        }
-
-    @monitoring_router.get("/stats")
-    async def get_stats_endpoint():
-        from app.core.monitoring_middleware import get_stats
-        data = get_stats()
-        uptime = datetime.now() - data["start_time"]
-        error_rate = round((data["total_errors"] / data["total_requests"] * 100), 2) if data["total_requests"] > 0 else 0.0
-
-        return {
-            "total_requests": data["total_requests"],
-            "total_errors": data["total_errors"],
-            "error_rate": error_rate,
-            "uptime": str(uptime).split('.')[0]
-        }
-
-    @monitoring_router.get("/logs")
-    async def get_recent_logs(limit: int = 10):
-        import os
-        from datetime import datetime
-        try:
-            log_dir = "logs"
-            all_logs = []
-            possible_files = ["app.log", "errors.log"]
-            
-            for filename in possible_files:
-                filepath = os.path.join(log_dir, filename)
-                if os.path.exists(filepath):
-                    with open(filepath, 'r', encoding='utf-8') as f:
-                        # Safely read just the end of the file
-                        # This avoids loading massive log files into memory
-                        f.seek(0, os.SEEK_END)
-                        file_size = f.tell()
-                        
-                        # Read at most 10KB from the end
-                        read_size = min(10240, file_size)
-                        f.seek(file_size - read_size)
-                        lines = f.readlines()
-                        
-                        # Ensure we get complete lines and take the last 100
-                        if file_size > read_size:
-                            lines = lines[1:]  # First line might be partial
-                        lines = lines[-100:]
-                        
-                    for line in lines:
-                        if " | " in line:
-                            parts = line.strip().split(" | ", 3)
-                            if len(parts) >= 3:
-                                all_logs.append({
-                                    "time": parts[0],
-                                    "level": parts[1].strip(),
-                                    "message": parts[-1]
-                                })
-            if not all_logs:
-                all_logs = [{"time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "level": "INFO", "message": "No logs yet. Make API calls."}]
-            return {"recent_logs": all_logs[-limit:]}
-        except Exception as e:
-            logger.error(f"Failed to read logs: {e}")
-            return {"recent_logs": []}
-
     app.include_router(monitoring_router)
 
     return app

@@ -8,20 +8,16 @@ from fastapi import Depends, HTTPException, Request, status
 
 from app.core.dependencies import get_current_user
 from app.core.logger_core import logger
+from app.schemas.user_schemas import CurrentUser
 
 
 def require_roles(allowed_roles: List[str]):
     def _checker(
         request: Request,
-        current_user = Depends(get_current_user),   # Removed type hint to avoid conflict
+        current_user: CurrentUser = Depends(get_current_user),
     ):
-        # Handle both Pydantic model and dict
-        if isinstance(current_user, dict):
-            user_role = current_user.get("role")
-            user_username = current_user.get("username", "unknown")
-        else:
-            user_role = getattr(current_user, "role", None)
-            user_username = getattr(current_user, "username", "unknown")
+        user_role = current_user.role
+        user_username = current_user.username
 
         if user_role not in allowed_roles:
             client_ip = request.client.host if request.client else "unknown"

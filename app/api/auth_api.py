@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from app.db.session_db import get_db
 from app.models.user_models import UserModel
 from app.schemas.auth_schemas import UserRegister, Token
+from app.schemas.user_schemas import CurrentUser
 from app.core.security import hash_password, verify_password, create_access_token
 from app.core.dependencies import get_current_user
 from app.core.logger_core import logger
@@ -106,8 +107,8 @@ def login(
     return {"access_token": token, "token_type": "bearer"}
 
 
-@router.get("/me")
-def get_me(request: Request, current_user: UserModel = Depends(get_current_user)):
+@router.get("/me", response_model=CurrentUser)
+def get_me(request: Request, current_user: CurrentUser = Depends(get_current_user)):
     client_ip = request.client.host if request.client else "unknown"
     logger.debug("ME | username={} | role={} | ip={}", current_user.username, current_user.role, client_ip)
-    return {"id": current_user.id, "username": current_user.username, "role": current_user.role}
+    return {"id": current_user.id, "username": current_user.username, "email": current_user.email, "role": current_user.role}

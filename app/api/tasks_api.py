@@ -6,6 +6,7 @@ from app.models.task_models import TaskModel
 from app.models.project_models import ProjectModel
 from app.models.user_models import UserModel
 from app.schemas.task_schemas import TaskCreate, TaskResponse
+from app.schemas.user_schemas import CurrentUser
 from app.core.dependencies import get_current_user
 from app.core.cache_core import (
     cache_project_by_id,
@@ -33,7 +34,7 @@ def _get_user_by_id(user_id: int, db: Session):
 def create_task(
     task: TaskCreate,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     # Check if project exists (cached)
     project = _get_project_by_id(task.project_id, db)
@@ -67,7 +68,7 @@ def create_task(
 @router.get("/", response_model=list[TaskResponse])
 def get_tasks(
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     return db.query(TaskModel).all()
 
@@ -77,7 +78,7 @@ def get_tasks(
 def get_task(
     task_id: int,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     task = db.query(TaskModel).filter(TaskModel.id == task_id).first()
     if not task:
@@ -91,7 +92,7 @@ def update_task(
     task_id: int,
     task_update: TaskCreate,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     task = db.query(TaskModel).filter(TaskModel.id == task_id).first()
     if not task:
@@ -117,7 +118,7 @@ def update_task(
 def delete_task(
     task_id: int,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     task = db.query(TaskModel).filter(TaskModel.id == task_id).first()
     if not task:
