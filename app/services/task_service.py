@@ -35,20 +35,11 @@ VALID_TRANSITIONS: dict[str, set[str]] = {
 
 def _extract_user_info(current_user):
     """
-    Supports both:
-    - dict users
-    - SQLAlchemy user objects
+    Returns dict with user info from CurrentUser model.
     """
-
-    if isinstance(current_user, dict):
-        return {
-            "id": current_user.get("id"),
-            "role": current_user.get("role"),
-        }
-
     return {
-        "id": getattr(current_user, "id", None),
-        "role": getattr(current_user, "role", None),
+        "id": current_user.id,
+        "role": current_user.role,
     }
 
 

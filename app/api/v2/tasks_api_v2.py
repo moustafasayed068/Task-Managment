@@ -38,6 +38,7 @@ from app.core.dependencies import get_current_user
 from app.db.session_db import get_db
 from app.models.user_models import UserModel
 from app.schemas.task_schemas import TaskCreate, TaskResponse, TaskUpdate
+from app.schemas.user_schemas import CurrentUser
 from app.services import task_service
 from app.core.cache_core import cache_task_by_id, invalidate_task_cache, _cache_get, _cache_setex
 from app.core.config_core import settings
@@ -57,7 +58,7 @@ router = APIRouter()
 def create_task(
     payload: TaskCreate,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(require_admin_or_pm()),
+    current_user: CurrentUser = Depends(require_admin_or_pm()),
 ):
     """
     Create a new task. The task is placed in the **'todo'** status by default
@@ -81,7 +82,7 @@ def create_task(
 )
 def get_tasks(
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(require_any_authenticated()),
+    current_user: CurrentUser = Depends(require_any_authenticated()),
     status_filter: Optional[str] = Query(
         default=None,
         alias="status",
@@ -103,7 +104,7 @@ def get_tasks(
     - **Employee**: always scoped to their own tasks; `assignee_id` param is ignored.
     - **Admin / Project Manager**: see all tasks; optional `assignee_id` filter applies.
     """
-    user_id = current_user.get("id") if isinstance(current_user, dict) else getattr(current_user, "id", 0)
+    user_id = current_user.id
     cache_key = f"cache:tasks:all:u{user_id}:s{status_filter}:p{priority_filter}:a{assignee_id}"
 
     cached_data = _cache_get(cache_key)
@@ -137,7 +138,7 @@ def get_tasks(
 def get_task(
     task_id: int,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(require_any_authenticated()),
+    current_user: CurrentUser = Depends(require_any_authenticated()),
 ):
     """
     Retrieve a task by ID.
@@ -160,7 +161,7 @@ def update_task(
     task_id: int,
     payload: TaskUpdate,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(require_any_authenticated()),
+    current_user: CurrentUser = Depends(require_any_authenticated()),
 ):
     """
     Update a task. The allowed fields depend on the caller's role:
@@ -193,7 +194,7 @@ def update_task(
 def delete_task(
     task_id: int,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(require_admin()),
+    current_user: CurrentUser = Depends(require_admin()),
 ):
     """
     Permanently delete a task.

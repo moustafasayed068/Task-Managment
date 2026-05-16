@@ -22,6 +22,7 @@ from app.core.authorization import require_admin, require_admin_or_pm, require_a
 from app.db.session_db import get_db
 from app.models.user_models import UserModel
 from app.schemas.project_schemas import ProjectCreate, ProjectResponse
+from app.schemas.user_schemas import CurrentUser
 from app.services import project_service
 from app.core.cache_core import cache_project_by_id, cache_all_projects, invalidate_project_cache
 
@@ -40,7 +41,7 @@ router = APIRouter()
 def create_project(
     payload: ProjectCreate,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(require_admin_or_pm()),
+    current_user: CurrentUser = Depends(require_admin_or_pm()),
 ):
     """
     Create a new project. The authenticated user becomes the owner.
@@ -65,7 +66,7 @@ def create_project(
 @cache_all_projects
 def get_projects(
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(require_any_authenticated()),
+    current_user: CurrentUser = Depends(require_any_authenticated()),
 ):
     """Return the full list of projects. Available to every authenticated role."""
     return project_service.get_all_projects(db)
@@ -83,7 +84,7 @@ def get_projects(
 def get_project(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(require_any_authenticated()),
+    current_user: CurrentUser = Depends(require_any_authenticated()),
 ):
     """Retrieve a project by its ID. Available to every authenticated role."""
     return project_service.get_project_by_id(db, project_id)
@@ -101,7 +102,7 @@ def update_project(
     project_id: int,
     payload: ProjectCreate,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(require_admin_or_pm()),
+    current_user: CurrentUser = Depends(require_admin_or_pm()),
 ):
     """
     Update project name / description.
@@ -126,7 +127,7 @@ def update_project(
 def delete_project(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(require_admin()),
+    current_user: CurrentUser = Depends(require_admin()),
 ):
     """
     Permanently delete a project.

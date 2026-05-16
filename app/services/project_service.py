@@ -28,17 +28,13 @@ def _get_project_or_404(db: Session, project_id: int) -> ProjectModel:
 
 
 def _get_user_role(current_user):
-    """Safely extract role whether current_user is model or dict"""
-    if isinstance(current_user, dict):
-        return current_user.get("role")
-    return getattr(current_user, "role", None)
+    """Safely extract role from CurrentUser"""
+    return current_user.role
 
 
 def _get_user_id(current_user):
-    """Safely extract id whether current_user is model or dict"""
-    if isinstance(current_user, dict):
-        return current_user.get("id")
-    return getattr(current_user, "id", None)
+    """Safely extract id from CurrentUser"""
+    return current_user.id
 
 
 # ---------------------------------------------------------------------------

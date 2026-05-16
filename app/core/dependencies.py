@@ -5,6 +5,7 @@ from jose import JWTError
 from sqlalchemy.orm import Session
 from app.db.session_db import get_db
 from app.models.user_models import UserModel
+from app.schemas.user_schemas import CurrentUser
 from app.core.security import decode_token
 from app.core.cache_core import cache_user_by_id, invalidate_user_cache
 from app.core.logger_core import logger
@@ -36,7 +37,10 @@ def get_current_user(
         if user is None:
             raise HTTPException(status_code=404, detail="User not found")
         
-        return user   # Always return UserModel object
+        # Ensure we always return the Pydantic CurrentUser model
+        if isinstance(user, dict):
+            return CurrentUser(**user)
+        return CurrentUser.model_validate(user)
 
     except (JWTError, TypeError, ValueError):
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -46,7 +50,7 @@ def require_role(required_role: str):
     def role_checker(
         request: Request,
         background_tasks: BackgroundTasks,
-        current_user: UserModel = Depends(get_current_user),
+        current_user: CurrentUser = Depends(get_current_user),
     ):
         if current_user.role != required_role:
             client_ip = request.client.host if request.client else "unknown"
