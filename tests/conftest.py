@@ -35,6 +35,15 @@ from app.models.user_models import UserModel
 TEST_DB_URL = "sqlite:///./test_task_management.db"
 
 
+@pytest.fixture(autouse=True)
+def _clear_cache():
+    # User ids restart at 1 in every test, so a cached user from the previous test
+    # would otherwise be returned with the wrong role.
+    from app.core.cache_core import _mem_cache
+    _mem_cache.clear()
+    yield
+
+
 @pytest.fixture(scope="function")
 def db_engine():
     engine = create_engine(

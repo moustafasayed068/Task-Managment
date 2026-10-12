@@ -109,7 +109,9 @@ APP_NAME="Task Management API"
 API_PREFIX="/api/v1"
 
 # ── Security ─────────────────────────────────────────────────
-SECRET_KEY=your-super-secret-key-change-me
+SECRET_KEY=change-me   # generate one: python -c "import secrets; print(secrets.token_urlsafe(32))"
+DEFAULT_ADMIN_USER=admin
+DEFAULT_ADMIN_PASSWORD=choose-a-strong-password
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 
@@ -184,12 +186,12 @@ The server starts at **http://127.0.0.1:8000**.
 
 ### Default Admin Account
 
-A default admin user is created automatically during the first startup:
+A default admin user is created on first startup **only if** `DEFAULT_ADMIN_PASSWORD` is set in `.env`:
 
-| Field    | Value      |
-| -------- | ---------- |
-| Username | `admin`    |
-| Password | `admin123` |
+| Field    | Value                                  |
+| -------- | -------------------------------------- |
+| Username | `DEFAULT_ADMIN_USER` (default `admin`) |
+| Password | `DEFAULT_ADMIN_PASSWORD`               |
 
 ### Roles
 
@@ -552,7 +554,7 @@ Open in Browser:
 → http://localhost:5500
 *Default Login:
 Username: admin
-Password: admin123
+Password: the `DEFAULT_ADMIN_PASSWORD` you set in `.env`
 
 ### 🐳 Docker (Optional)
 docker-compose up --build

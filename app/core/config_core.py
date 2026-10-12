@@ -1,7 +1,9 @@
 from pathlib import Path
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 import os
+import secrets
 
 _ENV_FILE = Path(__file__).resolve().parent.parent.parent / ".env"
 
@@ -11,13 +13,15 @@ def is_docker():
 class Settings(BaseSettings):
     app_name: str = "Task Management API"
     api_prefix: str = "/api/v1"
-    secret_key: str = "super-secret-key-change-me"
+    # ponytail: random per-process secret when SECRET_KEY is unset, so tokens die on restart
+    # and differ between workers. Set SECRET_KEY in .env for anything beyond local dev.
+    secret_key: str = Field(default_factory=lambda: secrets.token_urlsafe(32))
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     database_url: str = "sqlite:///./task_management.db"
 
     default_admin_user: str = "admin"
-    default_admin_password: str = "admin123"
+    default_admin_password: str | None = None
 
     redis_host: str = "localhost"
     redis_port: int = 6379

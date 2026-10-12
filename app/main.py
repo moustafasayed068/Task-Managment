@@ -30,7 +30,9 @@ async def lifespan(app: FastAPI):
     with SessionLocal() as db:
         admin_username = settings.default_admin_user
         admin = db.query(UserModel).filter(UserModel.username == admin_username).first()
-        if not admin:
+        if not admin and not settings.default_admin_password:
+            logger.warning("DEFAULT_ADMIN_PASSWORD is not set - skipping default admin creation")
+        elif not admin:
             logger.info("Creating default admin account...")
             new_admin = UserModel(
                 username=admin_username,
@@ -64,14 +66,9 @@ def create_app() -> FastAPI:
     # ====================== CORS (Runs first) ======================
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:5500",
-            "http://127.0.0.1:5500",
-            "http://localhost:8000",
-            "http://127.0.0.1:8000",
-            "*",
-        ],
-        allow_credentials=True,
+        # Auth is a Bearer header, not a cookie, so credentials stay off with a wildcard origin.
+        allow_origins=["*"],
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
         expose_headers=["*"],

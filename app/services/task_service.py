@@ -132,6 +132,11 @@ def create_task(
 
     if payload.status:
         _validate_status(payload.status)
+        if payload.status != "todo":
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="New tasks must start as 'todo'.",
+            )
 
     if payload.priority:
         _validate_priority(payload.priority)

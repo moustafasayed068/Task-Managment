@@ -72,7 +72,11 @@ def get_project_by_id(db: Session, project_id: int):
 
 def update_project(db: Session, project_id: int, payload: ProjectCreate, current_user):
     project = _get_project_or_404(db, project_id)
-    # Add ownership/permission logic here if needed
+    if _get_user_role(current_user) != "admin" and project.owner_id != _get_user_id(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only update your own projects.",
+        )
     project.name = payload.name
     project.description = payload.description
     db.commit()
